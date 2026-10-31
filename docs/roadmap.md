@@ -1,6 +1,6 @@
 # Roadmap / Abnahmekriterien
 
-**Projektstatus 2026-10-31:** Repository-Bootstrap. Es existieren weder installierte App-Abhaengigkeiten noch ein verifiziertes Eulenmodell, funktionierender Web-Avatar oder Live-LLM/TTS/STT in diesem Repo. Der Foundation-Check validiert nur das Grundgeruest.
+**Projektstatus 2026-10-31:** Bootstrap mit Mock-API, prozeduralem WebGL-Platzhalter, Lockfiles und ersten Browser-Smokes. Kein echtes Eulen-Rig und keine Live-LLM/TTS/STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
 
 ## Phase 1 — Mock End-to-End Grundgeruest
 - Vite/TypeScript/Three.js, Python FastAPI, testbare Provider-Vertraege und deterministische Mocks anlegen.

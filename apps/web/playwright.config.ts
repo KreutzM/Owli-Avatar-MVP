@@ -7,7 +7,7 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
-      command: 'python -m uvicorn owli_avatar.main:app --host 127.0.0.1 --port 8765',
+      command: '../api/.venv/bin/python -m uvicorn owli_avatar.main:app --host 127.0.0.1 --port 8765',
       url: 'http://127.0.0.1:8765/api/health',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

@@ -1,24 +1,28 @@
 # Validierungsstatus und offene Checks
 
-Dieser Bootstrap ist ein **Quellcode- und Mock-Startpunkt**, keine Live-Abnahme.
+Dieser Bootstrap ist ein **Mock-Startpunkt**, keine Live-TTS-/LLM-/STT-Abnahme.
 
 ## Soll-Checks auf einem frischen Ubuntu-Checkout
-- `python3 scripts/check_foundation.py`: Dateiexistenz, TOML-/JSON-Parsing, Modellkonfiguration und Python-Syntax.
+- `python3 scripts/check_foundation.py`: Dateiexistenz, TOML/JSON, Modellkonfiguration, Python-Syntax.
 - `bash -n scripts/bootstrap.sh scripts/run-dev.sh scripts/check.sh`: Shell-Syntax.
-- `bash scripts/bootstrap.sh`: projektlokale virtuelle Umgebung + NPM-Installation (**mit Internet, ausdruecklicher manueller Ausfuehrung**).
-- `bash scripts/check.sh`: Mock-API-Pytest und Web-Typecheck/Vite-Build.
-- `bash scripts/run-dev.sh`: FastAPI localhost:8765 und Vite localhost:5173.
-- Browser: Platzhalter 3D-Eule, textbasierter Mock-Chat, Status-/Fehlerzustaende; **kein echtes Model, kein echter Ton**.
+- Voraussetzungen: Node.js 22+ und Python 3.12+; `uv==0.9.17` als vorhandenes lokales Tool (separat installieren, falls noetig).
+- `bash scripts/bootstrap.sh`: `uv sync --frozen` und `npm ci` mit versionierten Lockfiles. Netz fuer den ersten Download benoetigt; nur lokale Projektpakete.
+- `bash scripts/check.sh`: Foundation, API-Pytest und Web-Typecheck/Vite-Build.
+- `bash scripts/run-dev.sh`: Mock-FastAPI localhost:8765 und Vite localhost:5173.
+- `npx playwright install chromium` aus `apps/web` nur falls Browser nicht vorhanden; `bash scripts/check.sh --browser` fuehrt zusaetzliche Browser-Smokes aus. Diese starten Mock-API und Vite lokal.
+- Browser: prozedurale Platzhalter-Eule, Textchat, WebGL-Fallback, API-Fehler/Timeout. **Kein importiertes Rig, keine echte Sprachausgabe**.
+
+## CI
+GitHub Actions prueft Foundation, Mock-API, Web-Build und Chromium-Playwright. Die CI benutzt **ausschliesslich Mocks** und kontaktiert KI-Server/Ollama nicht. Ein CI-Erfolg beweist weder Qualitaet realer 3D-Assets noch Latenz/Audio auf dem Ubuntu-Rechner.
 
 ## Vor Live- oder 3D-Abnahme
-- Modellquelle, Lizenz und SHA nachweisen. Blender/GLB + Browser-Screenshots pruefen.
-- Ollama / Piper / faster-whisper auf KI-Server separat freigeben und pruefen.
-- Audio-Mikrofon und Browser HTTPS-Kontext testen.
-- Latenz, WebGL-Leistung, Absturzverhalten, Unterbrechung und Ressourcen protokollieren.
+- Originalmodell, Lizenz und SHA pruefen. Blender/GLB und visuelle Three.js-Screenshots kontrollieren.
+- Ollama / Piper / faster-whisper auf KI-Server separat freigeben und testen.
+- Mikrofon und Browser-Secure-Context testen.
+- Latenz, WebGL-Performance, Unterbrechungen, Browser-Geraeteabdeckung und Ressourcennutzung messen.
 
-## Bestehende Grenzen des Bootstraps
-- `package-lock.json` noch nicht eingecheckt: beim ersten genehmigten `npm install` Lockdatei erstellen/pruefen/einchecken, dann CI auf `npm ci` umstellen.
-- Keine `uv.lock`; Python-Abhaengigkeiten sind in `pyproject.toml` nach Versionsbereichen spezifiziert, noch nicht reproduzierbar gelockt.
-- Der Mock-TTS/STT-Endpunkt meldet absichtlich HTTP 501. Der Mock-"speaking"-Zustand ist nur eine kurze **visuelle Simulation** und keine Sprach-/Lippensynchronisation.
-- GitHub CI kann Offline-/Build-Pruefungen liefern, ist aber kein Beleg eines Serverdeployments.
+## Technische Grenzen
+- Node-Lockfile: `apps/web/package-lock.json`; Python-Lockfile: `apps/api/uv.lock`. Beide werden nur nach expliziter Versionsentscheidung aktualisiert.
+- TTS-/STT-Endpunkte melden absichtlich HTTP 501. Der Mock-"speaking"-Zustand ist eine **visuelle Simulation**, keine Audio-Synchronisation.
+- Browser-Smoke deckt Standard-Canvas, deaktiviertes WebGL, HTTP-503-Fehler und einen abgebrochenen/langsamen Mock-Request ab. Er ersetzt keinen manuellen WebGL-Sichttest auf einem Zielgeraet.
 
