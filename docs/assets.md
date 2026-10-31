@@ -1,8 +1,10 @@
 # 3D-Assets — Import, Lizenz, Reproduzierbarkeit
 
-**Noch kein Modell ins Repo uebernommen oder im Browser verifiziert.** Modellkandidaten aus der vorlaeufigen Recherche:
-- Vuena Cute Pets v3.0 (Anbieterbeschreibung: Bird-Rig, 12 Clips, Schnabel/Blink); Produkt-/Versions-/Lizenzstatus vor Download erneut pruefen: https://vuena.itch.io/blocky-pets-free
-- Gobkit Owl GLB als leichter technischer Fallback: https://gobkit.com/freebies/animalB/Owl.glb (Lizenz/Version am Downloadzeitpunkt nachpruefen).
+Das freigegebene Modell ist das unveränderte Vuena-Sample `GLB/animal_owl.glb`.
+Die lokale Bereitstellung aus dem vorhandenen Archiv ist im README beschrieben;
+das GLB wird nicht mit Git verteilt. Original-GLB SHA-256:
+`0c445b7364fcf88b81c8300e4b953947bc911ee4dff2d51bb6a81fa7ceda0a22`.
+Eine öffentliche Weitergabe des Assets erfordert separate Rechteprüfung.
 
 ## Vor einem Import
 1. Originalseite, Rechteinhaber, exakte Datei/Version, Erwerbs-/Lizenzbedingungen, Download-Datum, SHA-256 und Quellen-URL in `assets/manifests/*.json` dokumentieren.

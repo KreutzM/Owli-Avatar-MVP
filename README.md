@@ -45,3 +45,15 @@ Die Projektkonfiguration ist in `.codex/config.toml` und den Rollen unter `.code
 
 Die Lizenz fuer **eigenen Projektcode ist noch zu entscheiden**. Externe Modelle, Stimmen und Gewichte duerfen erst nach nachweisbarer Lizenz- und Herkunftspruefung eingecheckt oder verteilt werden. Keine .env-Dateien, Tokens, personenbezogenen Testmitschnitte oder internen Serveradressen ins oeffentliche Git. Lokale LLM-/Audio-Nutzung ist Ziel, nicht bereits implementierter Ist-Zustand.
 
+
+### Lokales Vuena-Originalmodell
+
+Das Modell wird nicht mit dem Repository verteilt. Das vorhandene Sample-Archiv
+`Cute-Pets-Wildlife-FREE-Sample-CC0.zip` unter `assets/downloads/` ablegen und
+`python3 scripts/prepare-vuena.py` ausführen. Das Skript prüft Archiv und
+Original-GLB per SHA-256 und extrahiert ausschließlich `GLB/animal_owl.glb`.
+Ohne Modell bleibt der Textchat über einen Ladefehlerhinweis nutzbar. Das
+Original-Idle und die Lider bleiben erhalten; der Jaw wird nach dem Mixer
+absolut zwischen Ruhepose und maximaler Original-Call-Stellung interpoliert.
+Die Bewegung beim Mock-Dialog ist synthetisch, ohne Audio oder Viseme. Eine
+öffentliche Weitergabe des Assets erfordert eine gesonderte Rechteprüfung.
