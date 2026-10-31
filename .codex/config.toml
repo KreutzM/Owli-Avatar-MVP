@@ -1,0 +1,16 @@
+# Codex CLI project configuration. Actual availability is checked in-session.
+model = "gpt-6.1-terra"
+model_reasoning_effort = "medium"
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+
+[sandbox_workspace_write]
+# Needed for vetted docs/dependency fetches; sandbox/approvals still apply.
+network_access = true
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2
+default_subagent_model = "gpt-6-luna"
+default_subagent_reasoning_effort = "low"
+
