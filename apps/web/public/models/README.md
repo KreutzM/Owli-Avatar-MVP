@@ -1,4 +1,3 @@
-The browser uses a procedural owl placeholder until a third-party GLB is
-licensed, inspected and visually tested. Do not commit third-party GLB files
-without explicit provenance and redistribution rights. See docs/assets.md.
-
+Das Vuena-Originalmodell wird lokal mit `python3 scripts/prepare-vuena.py`
+aus dem vorhandenen Sample-Archiv bereitgestellt und nicht eingecheckt.
+Siehe README und docs/assets.md. Ohne Modell bleibt der Mock-Chat nutzbar.

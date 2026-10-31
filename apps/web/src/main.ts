@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { VuenaCharacterAdapter, type CharacterAdapter, type CharacterState } from './avatar/character';
 import './style.css';
 
-type AvatarState = 'idle' | 'thinking' | 'speaking' | 'error';
+type AvatarState = CharacterState;
 const host = document.querySelector<HTMLDivElement>('#avatar');
 const stateLabel = document.querySelector<HTMLSpanElement>('#state');
 const form = document.querySelector<HTMLFormElement>('#chat-form');
@@ -37,42 +39,34 @@ const key = new THREE.DirectionalLight(0xffffff, 2);
 key.position.set(-3, 6, 7);
 scene.add(key);
 
-const owl = new THREE.Group();
-scene.add(owl);
-const brown = new THREE.MeshStandardMaterial({ color: '#b77c4a', roughness: 0.82 });
-const cream = new THREE.MeshStandardMaterial({ color: '#f0dfb8', roughness: 0.84 });
-const gold = new THREE.MeshStandardMaterial({ color: '#efb54c', roughness: 0.65 });
-const pupil = new THREE.MeshStandardMaterial({ color: '#15212d', roughness: 0.2 });
-const perchMaterial = new THREE.MeshStandardMaterial({ color: '#6d4a34', roughness: 0.95 });
-function ball(x: number, y: number, z: number, sx: number, sy: number, sz: number, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), material);
-  mesh.position.set(x, y, z);
-  mesh.scale.set(sx, sy, sz);
-  owl.add(mesh);
-  return mesh;
-}
-ball(0, 0.2, 0, 0.95, 1.2, 0.72, brown);
-ball(0, 0.0, 0.53, 0.68, 0.83, 0.19, cream);
-ball(0, 1.55, 0, 1.05, 0.94, 0.8, brown);
-ball(-0.43, 1.58, 0.69, 0.38, 0.39, 0.10, cream);
-ball(0.43, 1.58, 0.69, 0.38, 0.39, 0.10, cream);
-ball(-0.43, 1.58, 0.79, 0.16, 0.18, 0.07, pupil);
-ball(0.43, 1.58, 0.79, 0.16, 0.18, 0.07, pupil);
-ball(-0.88, 0.15, -0.12, 0.24, 0.72, 0.54, brown);
-ball(0.88, 0.15, -0.12, 0.24, 0.72, 0.54, brown);
-ball(-0.42, -0.97, 0.36, 0.18, 0.16, 0.32, gold);
-ball(0.42, -0.97, 0.36, 0.18, 0.16, 0.32, gold);
-const beak = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.32, 4), gold);
-beak.rotation.z = Math.PI;
-beak.position.set(0, 1.28, 0.85);
-owl.add(beak);
-const perch = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 4.3, 20), perchMaterial);
-perch.rotation.z = Math.PI / 2;
-perch.position.set(0, -1.1, 0.18);
-scene.add(perch);
-
 let state: AvatarState = 'idle';
-const setState = (next: AvatarState) => { state = next; stateLabel.textContent = 'Status: ' + next; };
+let character: CharacterAdapter | undefined;
+let disposed = false;
+const setState = (next: AvatarState) => {
+  state = next;
+  character?.setState(next);
+  stateLabel.textContent = 'Status: ' + next;
+};
+host.dataset.character = 'loading';
+if (renderer) new GLTFLoader().load('/models/vuena-owl.glb', gltf => {
+  if (disposed) return;
+  character = new VuenaCharacterAdapter(gltf);
+  character.root.scale.setScalar(5);
+  character.root.position.y = -1.1;
+  character.setState(state);
+  scene.add(character.root);
+  host.dataset.character = 'vuena';
+  host.setAttribute('aria-label', 'Animierte dreidimensionale Vuena-Eule');
+  const description = document.querySelector<HTMLParagraphElement>('.heading p');
+  if (description) description.textContent = 'Vuena · 3D-Testmodell';
+}, undefined, () => {
+  host.dataset.character = 'unavailable';
+  const message = document.createElement('p');
+  message.id = 'model-fallback';
+  message.setAttribute('role', 'status');
+  message.textContent = 'Vuena-Modell nicht verfügbar. Der Textchat bleibt nutzbar.';
+  host.append(message);
+});
 function resize() {
   if (!renderer) return;
   const width = Math.max(1, host!.clientWidth);
@@ -91,14 +85,16 @@ let frame = 0;
 function animate() {
   if (!renderer) return;
   frame = requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
-  owl.position.y = Math.sin(t * 1.5) * 0.045;
-  owl.rotation.y = Math.sin(t * 0.7) * (state === 'thinking' ? 0.26 : 0.08);
-  beak.scale.y = state === 'speaking' ? 1 + Math.abs(Math.sin(t * 14)) * 0.7 : 1;
+  const delta = clock.getDelta();
+  const t = clock.elapsedTime;
+  character?.setMouthOpen(state === 'speaking' ? Math.abs(Math.sin(t * 14)) : 0);
+  character?.update(delta);
   renderer.render(scene, camera);
 }
 if (renderer) animate();
 window.addEventListener('pagehide', () => {
+  disposed = true;
+  character?.dispose();
   cancelAnimationFrame(frame);
   observer.disconnect();
   renderer?.dispose();
