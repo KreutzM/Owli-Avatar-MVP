@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Owli Avatar MVP — Platzhalter</title>
+  </head>
+  <body>
+    <main class="layout">
+      <section class="stage">
+        <div class="heading">
+          <h1>Owli Avatar MVP</h1>
+          <p>Geometrischer Test-Avatar – kein importiertes Eulenmodell</p>
+        </div>
+        <div id="avatar" aria-label="Animierter dreidimensionaler Eulen-Platzhalter"></div>
+        <span id="state" aria-live="polite">Status: idle</span>
+      </section>
+      <section class="dialogue" aria-label="Chat mit der Eule">
+        <h2>Lokaler Mock-Chat</h2>
+        <p>LLM, Spracherkennung und TTS sind noch nicht integriert.</p>
+        <div id="messages" role="log" aria-live="polite"></div>
+        <form id="chat-form">
+          <label for="message">Deine Nachricht</label>
+          <textarea id="message" name="message" maxlength="1000" rows="3" required></textarea>
+          <button id="send" type="submit">Absenden</button>
+        </form>
+        <p id="notice" role="status"></p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+

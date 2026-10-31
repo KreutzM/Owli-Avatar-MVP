@@ -1,0 +1,23 @@
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #e8f3fb;
+  background: #0e1b2a;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+.layout { max-width: 1200px; margin: auto; display: grid; grid-template-columns: minmax(0,1.4fr) minmax(290px,1fr); gap: 24px; padding: 24px; }
+.stage, .dialogue { background: #172a3e; padding: 20px; border: 1px solid #35506b; border-radius: 18px; }
+h1,h2 { margin: 0 0 8px; }
+.heading p, .dialogue p { color: #bacfdf; }
+#avatar { width: 100%; min-height: 420px; overflow: hidden; border-radius: 14px; background: #243a53; }
+#avatar canvas { display: block; width: 100%; height: 100%; }
+#state { display: block; margin: 12px 0 0; }
+#messages { min-height: 210px; max-height: 360px; overflow-y: auto; padding: 12px; border-radius: 12px; background: #0e1e2d; white-space: pre-wrap; }
+#messages p { margin: 0 0 10px; }
+label { display: block; margin-top: 14px; margin-bottom: 6px; }
+textarea { width: 100%; padding: 10px; border-radius: 8px; resize: vertical; background: #f7f9fc; color: #15283b; font: inherit; }
+button { margin-top: 10px; padding: 10px 16px; border-radius: 8px; background: #f4b95d; color: #15283b; font: inherit; font-weight: 700; cursor: pointer; border: 0; }
+button:disabled { opacity: .55; cursor: wait; }
+@media(max-width:750px){.layout{grid-template-columns:1fr;padding:12px}.stage,.dialogue{padding:14px}#avatar{min-height:320px}}
+
