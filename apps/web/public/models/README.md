@@ -1,4 +1,1 @@
-The browser uses a procedural owl placeholder until a third-party GLB is
-licensed, inspected and visually tested. Do not commit third-party GLB files
-without explicit provenance and redistribution rights. See docs/assets.md.
-
+The bundled Gobkit owl is a CC0 derivative. See assets/manifests/gobkit-owl.json and docs/verification-issue-3.md for provenance, modifications and validation. Other model files remain ignored pending license review.

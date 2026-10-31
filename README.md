@@ -1,6 +1,6 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: funktionsfaehiger Mock-Chat mit prozeduralem WebGL-Platzhalter; noch kein reales Eulenmodell und keine Live-Sprache.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit geriggter Gobkit-Eule und prozeduralem Fallback; keine Live-Sprache.** Der Schnabel wird vorerst zeitbasiert simuliert. Herkunft und Prüfungen: [Issue-3-Bericht](docs/verification-issue-3.md).
 
 ## Ziel und Grenzen
 

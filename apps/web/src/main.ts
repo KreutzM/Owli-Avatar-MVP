@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GobkitCharacterAdapter, type CharacterAdapter, type CharacterState } from './avatar/character';
 import './style.css';
 
-type AvatarState = 'idle' | 'thinking' | 'speaking' | 'error';
+type AvatarState = CharacterState;
 const host = document.querySelector<HTMLDivElement>('#avatar');
 const stateLabel = document.querySelector<HTMLSpanElement>('#state');
 const form = document.querySelector<HTMLFormElement>('#chat-form');
@@ -71,8 +73,33 @@ perch.rotation.z = Math.PI / 2;
 perch.position.set(0, -1.1, 0.18);
 scene.add(perch);
 
+host.dataset.character = 'placeholder';
 let state: AvatarState = 'idle';
-const setState = (next: AvatarState) => { state = next; stateLabel.textContent = 'Status: ' + next; };
+let character: CharacterAdapter | undefined;
+let disposed = false;
+const setState = (next: AvatarState) => {
+  state = next;
+  character?.setState(next);
+  stateLabel.textContent = 'Status: ' + next;
+};
+if (renderer) {
+  new GLTFLoader().load('/models/gobkit-owl.glb', gltf => {
+    if (disposed) return;
+    character = new GobkitCharacterAdapter(gltf);
+    character.root.scale.setScalar(0.85);
+    character.root.position.y = -1.1;
+    character.setState(state);
+    scene.add(character.root);
+    owl.visible = false;
+    host.dataset.character = 'gobkit';
+    host.setAttribute('aria-label', 'Animierte dreidimensionale Eule');
+    const description = document.querySelector<HTMLParagraphElement>('.heading p');
+    if (description) description.textContent = 'Geriggtes 3D-Testmodell · Gobkit';
+  }, undefined, error => {
+    host.dataset.character = 'placeholder';
+    console.warn('Eulenmodell nicht verfügbar; Platzhalter bleibt aktiv.', error);
+  });
+}
 function resize() {
   if (!renderer) return;
   const width = Math.max(1, host!.clientWidth);
@@ -91,14 +118,20 @@ let frame = 0;
 function animate() {
   if (!renderer) return;
   frame = requestAnimationFrame(animate);
-  const t = clock.getElapsedTime();
+  const delta = clock.getDelta();
+  const t = clock.elapsedTime;
   owl.position.y = Math.sin(t * 1.5) * 0.045;
   owl.rotation.y = Math.sin(t * 0.7) * (state === 'thinking' ? 0.26 : 0.08);
-  beak.scale.y = state === 'speaking' ? 1 + Math.abs(Math.sin(t * 14)) * 0.7 : 1;
+  const mouth = state === 'speaking' ? Math.abs(Math.sin(t * 14)) : 0;
+  beak.scale.y = 1 + mouth * 0.7;
+  character?.setMouthOpen(mouth);
+  character?.update(delta);
   renderer.render(scene, camera);
 }
 if (renderer) animate();
 window.addEventListener('pagehide', () => {
+  disposed = true;
+  character?.dispose();
   cancelAnimationFrame(frame);
   observer.disconnect();
   renderer?.dispose();

@@ -10,7 +10,7 @@ Dieser Bootstrap ist ein **Mock-Startpunkt**, keine Live-TTS-/LLM-/STT-Abnahme.
 - `bash scripts/check.sh`: Foundation, API-Pytest und Web-Typecheck/Vite-Build.
 - `bash scripts/run-dev.sh`: Mock-FastAPI localhost:8765 und Vite localhost:5173.
 - `npx playwright install chromium` aus `apps/web` nur falls Browser nicht vorhanden; `bash scripts/check.sh --browser` fuehrt zusaetzliche Browser-Smokes aus. Diese starten Mock-API und Vite lokal.
-- Browser: prozedurale Platzhalter-Eule, Textchat, WebGL-Fallback, API-Fehler/Timeout. **Kein importiertes Rig, keine echte Sprachausgabe**.
+- Browser: Gobkit-Eule mit Idle und simuliertem Schnabel, prozeduraler Fallback, Textchat, WebGL-Fallback, API-Fehler/Timeout. **Keine echte Sprachausgabe**. Siehe [Issue-3-Prüfbericht](verification-issue-3.md).
 
 ## CI
 GitHub Actions prueft Foundation, Mock-API, Web-Build und Chromium-Playwright. Die CI benutzt **ausschliesslich Mocks** und kontaktiert KI-Server/Ollama nicht. Ein CI-Erfolg beweist weder Qualitaet realer 3D-Assets noch Latenz/Audio auf dem Ubuntu-Rechner.

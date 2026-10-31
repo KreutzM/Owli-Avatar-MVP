@@ -1,0 +1,16 @@
+{
+  "id": "gobkit-owl",
+  "source_url": "https://gobkit.com/freebies/animalB/Owl.glb",
+  "catalog_url": "https://gobkit.com/api/free",
+  "license_source_url": "https://gobkit.com/freebies",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode",
+  "license_identifier": "CC0-1.0",
+  "downloaded_at": "2026-10-31",
+  "source_version": "unversioned; catalog measured 2026-08-19; identify by SHA-256",
+  "original_filename": "Owl.glb",
+  "sha256": "339a2eafd291fe1c2352d93d0755ca10a1c34d0b83b560a91cdca73053db3685",
+  "files": [{"path": "apps/web/public/models/gobkit-owl.glb", "sha256": "5b7a508a78b3de41f9535cf6d43fe1c80cb46adaf5812e56d8aaeeff1b44cb33", "description": "Derived GLB with authored BeakOpen morphs and lower beak; see tools/blender/author_gobkit.py"}],
+  "animation_clips": ["idle", "attack", "dead", "walk"],
+  "rig_controls": {"mouth": "Authored BeakOpen morphs; original Mouth bone has no weighted vertices", "blink": false, "gaze": false},
+  "validation": {"blender": "4.5.15 LTS import and reimport", "browser": "Chromium 140 / Playwright 1.55 software WebGL; see docs/verification-issue-3.md"}
+}

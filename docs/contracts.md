@@ -12,7 +12,7 @@ Alle Serverendpunkte unter `/api`, JSON ausser Audio-Binary. Versionsbrueche bew
 Fehlerform: `{"error":{"code":"...","message":"..."}}` mit passendem HTTP-Status. Von Anfang an ausstehende Anfrage, Timeout, Unterbrechung und den ausgeschalteten Provider beruecksichtigen.
 
 ## Avatar-Contract — semantisch
-Interface (TS-Konzept; noch kein Quelltext):
+Semantisches Interface (die implementierten Namen und Laufzeitmethoden stehen in `apps/web/src/avatar/character.ts`):
 
     type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 

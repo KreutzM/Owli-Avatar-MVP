@@ -21,6 +21,7 @@ test-results/
 assets/downloads/
 assets/processed/
 apps/web/public/models/*.glb
+!apps/web/public/models/gobkit-owl.glb
 apps/web/public/models/*.gltf
 apps/web/public/models/*.bin
 apps/web/public/models/*.ktx2

@@ -1,6 +1,6 @@
 # Roadmap / Abnahmekriterien
 
-**Projektstatus 2026-10-31:** Bootstrap mit Mock-API, prozeduralem WebGL-Platzhalter, Lockfiles und ersten Browser-Smokes. Kein echtes Eulen-Rig und keine Live-LLM/TTS/STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
+**Projektstatus 2026-10-31:** Mock-API, Gobkit-Eulen-Rig mit simuliertem Schnabel und prozeduralem Fallback; keine Live-LLM/TTS/STT-Integration. Siehe [Prüfbericht](verification-issue-3.md). CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
 
 ## Phase 1 — Mock End-to-End Grundgeruest
 - Vite/TypeScript/Three.js, Python FastAPI, testbare Provider-Vertraege und deterministische Mocks anlegen.

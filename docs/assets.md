@@ -1,6 +1,6 @@
 # 3D-Assets — Import, Lizenz, Reproduzierbarkeit
 
-**Noch kein Modell ins Repo uebernommen oder im Browser verifiziert.** Modellkandidaten aus der vorlaeufigen Recherche:
+**Issue 3:** Die Gobkit-Eule wurde als CC0-Derivat integriert und in Blender sowie Chromium geprüft. Details und Grenzen stehen im [Manifest](../assets/manifests/gobkit-owl.json) und [Prüfbericht](verification-issue-3.md). Kandidaten:
 - Vuena Cute Pets v3.0 (Anbieterbeschreibung: Bird-Rig, 12 Clips, Schnabel/Blink); Produkt-/Versions-/Lizenzstatus vor Download erneut pruefen: https://vuena.itch.io/blocky-pets-free
 - Gobkit Owl GLB als leichter technischer Fallback: https://gobkit.com/freebies/animalB/Owl.glb (Lizenz/Version am Downloadzeitpunkt nachpruefen).
 
