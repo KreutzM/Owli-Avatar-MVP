@@ -3,9 +3,29 @@
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Owli Avatar MVP", version="0.1.0")
+
+
+def api_error(status: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request, exc: RequestValidationError) -> JSONResponse:
+    return api_error(422, "VALIDATION_ERROR", "Invalid request payload")
+
+
+@app.exception_handler(HTTPException)
+async def handle_http_error(request, exc: HTTPException) -> JSONResponse:
+    if exc.status_code == 501:
+        return api_error(501, "NOT_IMPLEMENTED", str(exc.detail))
+    if exc.status_code == 422:
+        return api_error(422, "VALIDATION_ERROR", str(exc.detail))
+    return api_error(exc.status_code, "HTTP_ERROR", str(exc.detail))
 
 
 class ChatRequest(BaseModel):
@@ -29,7 +49,7 @@ def avatar_config() -> dict[str, object]:
     return {
         "id": "procedural-owl-placeholder",
         "mode": "placeholder",
-        "capabilities": {"mouth": True, "blink": True, "gaze": False},
+        "capabilities": {"mouth": True, "blink": False, "gaze": False},
     }
 
 

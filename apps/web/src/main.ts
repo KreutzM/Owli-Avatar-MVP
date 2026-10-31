@@ -18,9 +18,20 @@ scene.background = new THREE.Color('#243a53');
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
 camera.position.set(0, 1.4, 7.7);
 camera.lookAt(0, 0.65, 0);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-host.append(renderer.domElement);
+let renderer: THREE.WebGLRenderer | null = null;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  host.append(renderer.domElement);
+} catch (error) {
+  console.warn('3D rendering unavailable; text chat remains usable.', error);
+  const message = document.createElement('p');
+  message.textContent = '3D-Darstellung ist auf diesem Gerät nicht verfügbar. Der Textchat funktioniert weiterhin.';
+  message.setAttribute('role', 'status');
+  message.id = 'webgl-fallback';
+  message.style.padding = '24px';
+  host.append(message);
+}
 scene.add(new THREE.HemisphereLight(0xffffff, 0x4f6c87, 2.4));
 const key = new THREE.DirectionalLight(0xffffff, 2);
 key.position.set(-3, 6, 7);
@@ -63,6 +74,7 @@ scene.add(perch);
 let state: AvatarState = 'idle';
 const setState = (next: AvatarState) => { state = next; stateLabel.textContent = 'Status: ' + next; };
 function resize() {
+  if (!renderer) return;
   const width = Math.max(1, host!.clientWidth);
   const height = Math.max(1, host!.clientHeight);
   renderer.setSize(width, height);
@@ -70,11 +82,14 @@ function resize() {
   camera.updateProjectionMatrix();
 }
 const observer = new ResizeObserver(resize);
-observer.observe(host);
-resize();
+if (renderer) {
+  observer.observe(host);
+  resize();
+}
 const clock = new THREE.Clock();
 let frame = 0;
 function animate() {
+  if (!renderer) return;
   frame = requestAnimationFrame(animate);
   const t = clock.getElapsedTime();
   owl.position.y = Math.sin(t * 1.5) * 0.045;
@@ -82,11 +97,11 @@ function animate() {
   beak.scale.y = state === 'speaking' ? 1 + Math.abs(Math.sin(t * 14)) * 0.7 : 1;
   renderer.render(scene, camera);
 }
-animate();
+if (renderer) animate();
 window.addEventListener('pagehide', () => {
   cancelAnimationFrame(frame);
   observer.disconnect();
-  renderer.dispose();
+  renderer?.dispose();
 });
 
 function appendMessage(who: string, value: string) {
@@ -107,7 +122,8 @@ form.addEventListener('submit', async event => {
   setState('thinking');
   try {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 15000;
+    const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
     let response: Response;
     try {
       response = await fetch('/api/chat', {

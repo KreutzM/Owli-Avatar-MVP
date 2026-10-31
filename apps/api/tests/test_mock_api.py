@@ -20,17 +20,24 @@ def test_chat_is_deterministic_and_not_live() -> None:
 
 
 def test_invalid_messages_rejected() -> None:
-    assert client.post("/api/chat", json={"message": ""}).status_code == 422
-    assert client.post("/api/chat", json={"message": " "}).status_code == 422
-    assert client.post("/api/chat", json={"message": "a" * 1001}).status_code == 422
+    for message in ("", " ", "a" * 1001):
+        response = client.post("/api/chat", json={"message": message})
+        assert response.status_code == 422
+        assert response.json() == {
+            "error": {"code": "VALIDATION_ERROR", "message": response.json()["error"]["message"]}
+        }
 
 
 def test_missing_tts_stt_fail_openly() -> None:
-    assert client.post("/api/tts").status_code == 501
-    assert client.post("/api/stt").status_code == 501
+    for path in ("/api/tts", "/api/stt"):
+        response = client.post(path)
+        assert response.status_code == 501
+        assert response.json()["error"]["code"] == "NOT_IMPLEMENTED"
+        assert isinstance(response.json()["error"]["message"], str)
 
 
 def test_avatar_is_labelled_placeholder() -> None:
     data = client.get("/api/avatar/config").json()
     assert data["mode"] == "placeholder"
+    assert data["capabilities"]["blink"] is False
 
