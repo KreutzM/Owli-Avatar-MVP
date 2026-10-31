@@ -26,3 +26,25 @@ GitHub Actions prueft Foundation, Mock-API, Web-Build und Chromium-Playwright. D
 - TTS-/STT-Endpunkte melden absichtlich HTTP 501. Der Mock-"speaking"-Zustand ist eine **visuelle Simulation**, keine Audio-Synchronisation.
 - Browser-Smoke deckt Standard-Canvas, deaktiviertes WebGL, HTTP-503-Fehler und einen abgebrochenen/langsamen Mock-Request ab. Er ersetzt keinen manuellen WebGL-Sichttest auf einem Zielgeraet.
 
+
+## Entwicklungsumgebung und Sandbox (2026-10-31)
+
+Die systemseitige Bubblewrap-Installation und das gezielte Ubuntu-AppArmor-Profil
+wurden vor dieser Arbeit repariert. Der Nutzer meldete `codex sandbox -- /bin/true`
+und `codex sandbox -- /bin/sh -c 'id; pwd'` jeweils mit Exit-Code 0. In dieser
+Session liefen `id && pwd` sowohl beim Hauptagenten als auch beim Luna-Subagenten
+in ihrer jeweiligen Sandbox mit Exit-Code 0. Die Projektkonfiguration setzt
+`gpt-6.1-terra`/medium, `workspace-write`, `on-request` und Netzwerkzugriff;
+die aktive Hauptmodellidentitaet ist hier nicht unabhaengig auslesbar.
+Die bestehenden Grenzen fuer Deployments, Systemaenderungen, KI-Server und
+Netzwerkdienste aus AGENTS.md bleiben unveraendert.
+
+`bash scripts/preflight.sh` prueft ohne Installation die Werkzeuge einschliesslich
+Blender-Headless und eines echten Playwright-Chromium-Starts. Ein Fehler ergibt
+Exit-Code 1; alle Checks laufen trotzdem. Optional `BLENDER_BIN`,
+`PLAYWRIGHT_BROWSERS_PATH` und `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` setzen.
+Ein expliziter Browserpfad kann von der durch Playwright vorgesehenen Version
+abweichen; Testergebnis und Version deshalb dokumentieren. Der Sandbox-Preflight
+kann wegen Sandbox-Beschraenkungen fehlschlagen, selbst wenn ein Werkzeug
+außerhalb funktioniert. Playwright startet seine Testserver selbst und bricht bei
+bereits belegten Ports ab, statt fremde Server wiederzuverwenden.

@@ -35,3 +35,15 @@ Hauptagent verarbeitet nur entscheidungsrelevante Ergebnisse und prueft die tats
 
 Quellen: https://developers.openai.com/codex/subagents und https://developers.openai.com/codex/config-reference
 
+
+## Werkzeug-Handoff fuer Reviews
+Vor einem Review `bash scripts/preflight.sh` ausfuehren und den vollstaendigen
+Ergebnisstatus sowie die getesteten Kommandos im Auftrag nennen. Einen festen
+Base-/Head-SHA, den Blender-Pfad (`BLENDER_BIN`), Browser-Cache
+(`PLAYWRIGHT_BROWSERS_PATH`) und gegebenenfalls den expliziten Browserpfad
+(`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`) sowie relevante PATH-Ergaenzungen
+weitergeben. Nur gesetzte Werte weitergeben; Pfade und Verfuegbarkeit in der
+Sandbox des Reviewers erneut pruefen. Fehlende oder nicht startbare Werkzeuge
+als ungetestet melden, nicht durch eine Versionsausgabe als Test ersetzen.
+Playwright startet seine eigenen localhost-Testserver und bricht bei belegten
+Ports ab; laufende Dienste nicht automatisch beenden.
