@@ -26,3 +26,49 @@ GitHub Actions prueft Foundation, Mock-API, Web-Build und Chromium-Playwright. D
 - TTS-/STT-Endpunkte melden absichtlich HTTP 501. Der Mock-"speaking"-Zustand ist eine **visuelle Simulation**, keine Audio-Synchronisation.
 - Browser-Smoke deckt Standard-Canvas, deaktiviertes WebGL, HTTP-503-Fehler und einen abgebrochenen/langsamen Mock-Request ab. Er ersetzt keinen manuellen WebGL-Sichttest auf einem Zielgeraet.
 
+
+## Entwicklungsumgebung und Sandbox (2026-10-31)
+
+Die systemseitige Bubblewrap-Installation und das gezielte Ubuntu-AppArmor-Profil
+wurden vor dieser Arbeit repariert. Der Nutzer meldete `codex sandbox -- /bin/true`
+und `codex sandbox -- /bin/sh -c 'id; pwd'` jeweils mit Exit-Code 0. In dieser
+Session liefen `id && pwd` sowohl beim Hauptagenten als auch beim Luna-Subagenten
+in ihrer jeweiligen Sandbox mit Exit-Code 0. Die Projektkonfiguration setzt
+`gpt-6.1-terra`/medium, `workspace-write`, `on-request` und Netzwerkzugriff;
+die aktive Hauptmodellidentitaet ist hier nicht unabhaengig auslesbar.
+Die bestehenden Grenzen fuer Deployments, Systemaenderungen, KI-Server und
+Netzwerkdienste aus AGENTS.md bleiben unveraendert.
+
+`bash scripts/preflight.sh` prueft ohne Installation die Werkzeuge einschliesslich
+Blender-Headless und eines echten Playwright-Chromium-Starts. Ein Fehler ergibt
+Exit-Code 1; alle Checks laufen trotzdem. Optional `BLENDER_BIN`,
+`PLAYWRIGHT_BROWSERS_PATH` und `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` setzen.
+Ein expliziter Browserpfad kann von der durch Playwright vorgesehenen Version
+abweichen; Testergebnis und Version deshalb dokumentieren. Der Sandbox-Preflight
+kann wegen Sandbox-Beschraenkungen fehlschlagen, selbst wenn ein Werkzeug
+außerhalb funktioniert. Playwright startet seine Testserver selbst und bricht bei
+bereits belegten Ports ab, statt fremde Server wiederzuverwenden.
+
+### Ergebnis auf dem Entwicklungsrechner
+
+`uv 0.9.17` wurde in einer benutzereigenen virtuellen Umgebung unter
+`~/.local/share/owli-devtools/uv-0.9.17/bin` installiert; dieser Pfad muss fuer
+Bootstrap/Preflight im `PATH` stehen. Playwright 1.55.0 installierte Chromium
+140.0.7339.16 (Build 1187) nach `~/.cache/ms-playwright`. Der lokale Node-Wrapper
+verwendet sonst einen anderen Cache; fuer diesen Test wurde
+`PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"` explizit gesetzt.
+
+Mit diesen Einstellungen meldete der Preflight in der Codex-Sandbox alle Checks
+bis auf Chromium erfolgreich (Python 3.12.3, API-Python 3.14.7, Node 24.22.0,
+npm 11.19.1, Git 2.43.0, Blender 4.5.15 LTS headless). Chromium scheiterte mit
+`shutdown: Operation not permitted`. Ein minimaler Python-Test mit
+`socket.socketpair()` und `shutdown(SHUT_WR)` scheiterte ebenfalls mit `EPERM`;
+`/proc/self/status` zeigte einen aktiven Seccomp-Filter. Die konkrete Filterregel
+wurde nicht ausgelesen, `strace` war durch verweigertes `ptrace` nicht nutzbar.
+Außerhalb der Codex-Sandbox funktionierten derselbe Socket-Test und der komplette
+Preflight; der passende Chromium startete. Die eng begrenzte lokale Ausfuehrung
+von `bash scripts/check.sh --browser` bestand mit 5 API- und 4 Browser-Tests
+sowie Web-Build. Playwright startet Chromium standardmaessig mit `--no-sandbox`;
+es wurde keine dauerhafte oder globale Sicherheitskonfiguration geaendert.
+GitHub-CI bleibt der unabhaengige Browser-Test. Keine dieser Pruefungen ist eine
+Live-LLM-/TTS-/STT-Abnahme.
