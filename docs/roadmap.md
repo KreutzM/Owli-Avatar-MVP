@@ -1,6 +1,6 @@
 # Roadmap / Abnahmekriterien
 
-**Projektstatus 2026-10-31:** Bootstrap mit Mock-API, prozeduralem WebGL-Platzhalter, Lockfiles und ersten Browser-Smokes. Kein echtes Eulen-Rig und keine Live-LLM/TTS/STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
+**Projektstatus 2026-10-31:** Mock-API und lokal bereitgestelltes Vuena-Originalmodell mit Idle, Blinzeln und synthetischer Jaw-Steuerung. Keine Live-LLM/TTS/STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
 
 ## Phase 1 — Mock End-to-End Grundgeruest
 - Vite/TypeScript/Three.js, Python FastAPI, testbare Provider-Vertraege und deterministische Mocks anlegen.
