@@ -1,6 +1,6 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog; keine Live-TTS- oder STT-Integration.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog und optionale Piper-Sprachausgabe; kein STT.**
 
 ## Ziel und Grenzen
 
@@ -73,3 +73,22 @@ Sessions liegen begrenzt im Speicher eines einzelnen Backend-Prozesses und
 gehen bei Neustart verloren. Die Bewegung beim Antworten bleibt eine
 synthetische Simulation ohne Ton oder Viseme. Live-Ollama ist separat von
 Mock-CI und Browserabnahme zu pruefen.
+
+### Optionale lokale Sprachausgabe
+
+Standard `OWLI_TTS_MODE=off`: Textchat funktioniert ohne TTS. Ein bereits
+separat laufender Piper-HTTP-Prozess kann mit `OWLI_TTS_MODE=piper` und
+`PIPER_BASE_URL=http://127.0.0.1:5000` beim API-Start konfiguriert werden.
+Nur HTTP-Loopback wird akzeptiert. `PIPER_CONNECT_TIMEOUT` und
+`PIPER_TOTAL_TIMEOUT` setzen Sekundenlimits (Standard 3 und 60). Es werden keine
+Dienste gestartet oder Stimmen heruntergeladen. Aktivierung im Browser erfolgt
+ausdruecklich durch Nutzereingabe; Lautstaerke und Stop sind bedienbar.
+
+Der Wiedergabepegel steuert die vorhandene originale Jaw-Steuerung per RMS,
+Noise-Gate und Glaettung. Das ist amplitudenbasierte Bewegung, keine Phonem-
+oder Visem-Synchronisation. Ohne Audio schliesst der Jaw.
+
+Piper wird separat betrieben: [piper-tts](https://pypi.org/project/piper-tts/)
+nennt GPL-3.0-or-later; Stimmen haben eigene Lizenzen. Bei Weitergabe sind
+Paket- und Stimmrechte gesondert zu pruefen. Dieses Repository enthaelt keine
+Piper-Stimme.

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VuenaCharacterAdapter, type CharacterAdapter, type CharacterState } from './avatar/character';
+import { AudioPlayer } from './audio/AudioPlayer';
 import './style.css';
 
 type AvatarState = CharacterState;
@@ -11,7 +12,11 @@ const input = document.querySelector<HTMLTextAreaElement>('#message');
 const messages = document.querySelector<HTMLDivElement>('#messages');
 const notice = document.querySelector<HTMLParagraphElement>('#notice');
 const send = document.querySelector<HTMLButtonElement>('#send');
-if (!host || !stateLabel || !form || !input || !messages || !notice || !send) {
+const speechEnabled = document.querySelector<HTMLInputElement>('#speech-enabled');
+const stopAudioButton = document.querySelector<HTMLButtonElement>('#stop-audio');
+const speechStatus = document.querySelector<HTMLParagraphElement>('#speech-status');
+const volume = document.querySelector<HTMLInputElement>('#volume');
+if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !speechStatus || !volume) {
   throw new Error('Required UI elements missing');
 }
 
@@ -47,6 +52,33 @@ const setState = (next: AvatarState) => {
   character?.setState(next);
   stateLabel.textContent = 'Status: ' + next;
 };
+let speechGeneration = 0;
+let speechRequest: AbortController | undefined;
+const audioPlayer = new AudioPlayer({ onEnded: () => {
+  setState('idle');
+  stopAudioButton!.disabled = true;
+  speechStatus.textContent = 'Wiedergabe beendet.';
+}});
+function stopSpeech(): void {
+  speechGeneration++;
+  speechRequest?.abort();
+  speechRequest = undefined;
+  audioPlayer.stop();
+  character?.setMouthOpen(0);
+  stopAudioButton!.disabled = true;
+  setState('idle');
+}
+stopAudioButton.addEventListener('click', () => { stopSpeech(); speechStatus.textContent = 'Wiedergabe gestoppt.'; });
+speechEnabled.addEventListener('change', () => { if (!speechEnabled.checked) stopSpeech(); });
+volume.addEventListener('input', () => audioPlayer.setVolume(Number(volume.value)));
+void fetch('/api/tts/status').then(async response => {
+  if (!response.ok) throw new Error('TTS status unavailable');
+  const status = await response.json() as {enabled?: unknown};
+  if (status.enabled === true) {
+    speechEnabled.disabled = false;
+    speechStatus.textContent = 'Sprachausgabe verfügbar; bitte aktivieren.';
+  } else speechStatus.textContent = 'Sprachausgabe deaktiviert; Textchat bleibt verfügbar.';
+}).catch(() => { speechStatus.textContent = 'Sprachausgabe nicht verfügbar; Textchat bleibt verfügbar.'; });
 host.dataset.character = 'loading';
 if (renderer) new GLTFLoader().load('/models/vuena-owl.glb', gltf => {
   if (disposed) return;
@@ -86,14 +118,17 @@ function animate() {
   if (!renderer) return;
   frame = requestAnimationFrame(animate);
   const delta = clock.getDelta();
-  const t = clock.elapsedTime;
-  character?.setMouthOpen(state === 'speaking' ? Math.abs(Math.sin(t * 14)) : 0);
+  const mouth = audioPlayer.sampleLevel();
+  host!.dataset.mouth = mouth.toFixed(3);
+  character?.setMouthOpen(mouth);
   character?.update(delta);
   renderer.render(scene, camera);
 }
 if (renderer) animate();
 window.addEventListener('pagehide', () => {
   disposed = true;
+  stopSpeech();
+  audioPlayer.dispose();
   character?.dispose();
   cancelAnimationFrame(frame);
   observer.disconnect();
@@ -114,11 +149,11 @@ void fetch('/api/health').then(async response => {
   const mode = (health as { mode?: unknown } | null)?.mode;
   if (modeLabel && (mode === 'mock' || mode === 'ollama')) {
     modeLabel.textContent = mode === 'ollama'
-      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet. Keine Spracherkennung oder TTS.'
-      : 'Mock-Modus: Antworten sind simuliert. Keine Spracherkennung oder TTS.';
+      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet. Keine Spracherkennung.'
+      : 'Mock-Modus: Antworten sind simuliert. Keine Spracherkennung.';
   }
 }).catch(() => {
-  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar. Keine Spracherkennung oder TTS.';
+  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar. Keine Spracherkennung.';
 });
 
 let sessionId: string | undefined;
@@ -127,6 +162,10 @@ form.addEventListener('submit', async event => {
   event.preventDefault();
   const message = input.value.trim();
   if (!message || send.disabled) return;
+  stopSpeech();
+  const generation = speechGeneration;
+  const wantsSpeech = speechEnabled.checked && !speechEnabled.disabled;
+  const audioReady = wantsSpeech ? audioPlayer.initialize().then(() => true, () => false) : Promise.resolve(false);
   appendMessage('Du', message);
   input.value = '';
   send.disabled = true;
@@ -161,16 +200,42 @@ form.addEventListener('submit', async event => {
       throw new Error('Unexpected API response');
     }
     sessionId = chatResult.session_id;
-    setState('speaking'); // Visual simulation only; no TTS playback yet.
-    notice.textContent = 'Sprechen wird nur visuell simuliert; es wird kein Ton ausgegeben.';
     appendMessage(chatResult.mode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', chatResult.reply);
-    await new Promise<void>(resolve => window.setTimeout(resolve, 700));
+    if (wantsSpeech && generation === speechGeneration) {
+      if (!(await audioReady)) throw new Error('Audio unavailable');
+      if (generation !== speechGeneration) return;
+      const synth = new AbortController();
+      speechRequest = synth;
+      stopAudioButton.disabled = false;
+      speechStatus.textContent = 'Sprachausgabe wird erzeugt …';
+      const synthTimeout = window.setTimeout(() => synth.abort(), 65000);
+      try {
+        const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: chatResult.reply }), signal: synth.signal });
+        if (!response.ok) throw new Error('TTS HTTP ' + response.status);
+        const wav = await response.arrayBuffer();
+        if (generation !== speechGeneration) return;
+        await audioPlayer.playWav(wav);
+        if (generation !== speechGeneration) return;
+        setState('speaking');
+        speechStatus.textContent = 'Wiedergabe läuft.';
+      } finally {
+        window.clearTimeout(synthTimeout);
+        if (speechRequest === synth) speechRequest = undefined;
+      }
+    } else {
+      notice.textContent = 'Textantwort ohne Ton.';
+    }
   } catch (error) {
-    setState('error');
-    notice.textContent = 'Chat-API nicht erreichbar oder Antwort ungueltig. Backend lokal starten und erneut versuchen.';
-    console.error(error);
+    if (generation === speechGeneration) {
+      stopSpeech();
+      setState('error');
+      notice.textContent = wantsSpeech && messages!.lastElementChild?.textContent?.startsWith('Eule')
+        ? 'Sprachausgabe nicht erreichbar oder fehlgeschlagen; Textantwort bleibt erhalten.'
+        : 'Chat-API nicht erreichbar oder Antwort ungueltig. Backend lokal starten und erneut versuchen.';
+      console.error(error);
+    }
   } finally {
-    setState('idle');
+    if (state !== 'speaking') setState('idle');
     send.disabled = false;
     input.focus();
   }

@@ -61,7 +61,7 @@ test('Ollama mode continues the returned session across turns', async ({ page })
     { message: 'Erster Zug' },
     { message: 'Zweiter Zug', session_id: 'ollama-session-1' },
   ]);
-  await expect(page.locator('#notice')).toContainText('kein Ton');
+  await expect(page.locator('#notice')).toContainText('ohne Ton');
 });
 
 test('API error can be retried successfully', async ({ page }) => {

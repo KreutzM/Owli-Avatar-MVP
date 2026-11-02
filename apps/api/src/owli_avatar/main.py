@@ -11,8 +11,9 @@ from fastapi import FastAPI, HTTPException, Request
 
 from .ollama import OllamaProvider, ProviderError
 from .sessions import Sessions
+from .tts import MAX_TEXT_CHARS, PiperProvider
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 class ChatGuard:
@@ -23,7 +24,7 @@ class ChatGuard:
         self.read_timeout = 5
 
     async def __call__(self, scope, receive, send):
-        if scope['type'] != 'http' or scope['path'] != '/api/chat' or scope['method'] != 'POST':
+        if scope['type'] != 'http' or scope['path'] not in ('/api/chat', '/api/tts') or scope['method'] != 'POST':
             return await self.app(scope, receive, send)
         now = time.monotonic()
         while self.requests and now - self.requests[0] >= 60:
@@ -65,6 +66,7 @@ app = FastAPI(title="Owli Avatar MVP", version="0.1.0")
 app.add_middleware(ChatGuard)
 sessions = Sessions()
 active_provider_requests = 0
+active_tts_requests = 0
 
 
 def mode() -> str:
@@ -186,9 +188,57 @@ async def ollama_chat(payload: ChatRequest, request: Request, message: str, chat
                 sessions.items.pop(session_id, None)
 
 
-@app.post("/api/tts", status_code=501)
-def tts_not_implemented() -> dict[str, str]:
-    raise HTTPException(status_code=501, detail="TTS is not implemented")
+def tts_mode() -> str:
+    value = os.getenv("OWLI_TTS_MODE", "off")
+    if value not in ("off", "piper"):
+        raise ProviderError("TTS_CONFIG_ERROR", 503, "Speech is not configured correctly")
+    return value
+
+
+def tts_provider() -> PiperProvider:
+    try:
+        connect = float(os.getenv("PIPER_CONNECT_TIMEOUT", "3"))
+        total = float(os.getenv("PIPER_TOTAL_TIMEOUT", "60"))
+        if not (0 < connect <= 30 and 0 < total <= 300):
+            raise ValueError
+        return PiperProvider(os.getenv("PIPER_BASE_URL", "http://127.0.0.1:5000"), connect, total)
+    except ValueError as exc:
+        raise ProviderError("TTS_CONFIG_ERROR", 503, "Speech is not configured correctly") from exc
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_TEXT_CHARS)
+
+
+@app.get("/api/tts/status")
+def tts_status() -> dict[str, bool]:
+    return {"enabled": tts_mode() == "piper"}
+
+
+@app.post("/api/tts")
+async def tts(request: Request, payload: TTSRequest | None = None) -> Response:
+    if tts_mode() == "off":
+        raise HTTPException(status_code=501, detail="TTS is disabled")
+    if payload is None or not payload.text.strip():
+        raise HTTPException(status_code=422, detail="Text must not be blank")
+    global active_tts_requests
+    if active_tts_requests >= 2:
+        raise ProviderError("TTS_BUSY", 503, "Speech synthesis is busy")
+    speech = tts_provider()
+    active_tts_requests += 1
+    task = asyncio.create_task(speech.synthesize(payload.text.strip()))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.1)
+            if not task.done() and await request.is_disconnected():
+                raise asyncio.CancelledError
+        audio = await task
+        return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        active_tts_requests -= 1
 
 
 @app.post("/api/stt", status_code=501)
