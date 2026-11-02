@@ -1,6 +1,6 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog und optionale Piper-Sprachausgabe; kein STT.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog und optionale Piper-Sprachausgabe und optionales lokales STT; Live-Mikrofonabnahme offen.**
 
 ## Ziel und Grenzen
 
@@ -92,3 +92,22 @@ Piper wird separat betrieben: [piper-tts](https://pypi.org/project/piper-tts/)
 nennt GPL-3.0-or-later; Stimmen haben eigene Lizenzen. Bei Weitergabe sind
 Paket- und Stimmrechte gesondert zu pruefen. Dieses Repository enthaelt keine
 Piper-Stimme.
+
+### Optionale Spracheingabe
+
+Standard ist `OWLI_STT_MODE=off`. Fuer den optionalen STT-Modus werden
+`faster-whisper` und PyAV in der Python-Umgebung des API-Prozesses benoetigt,
+sowie ein explizit vorhandenes CTranslate2-Modellverzeichnis `STT_MODEL_PATH`
+(absolut, mit `model.bin`, `config.json` und `tokenizer.json`). Erst nach
+gesonderter Genehmigung installieren bzw. ein Modell herunterladen; der
+Provider selbst laedt keine Modell- oder Tokenizer-Dateien herunter.
+`OWLI_STT_MODE=faster-whisper` aktiviert die Erkennung, `STT_TIMEOUT` setzt
+das Limit in Sekunden (Standard 60, Maximum 120). Inferenz laeuft fuer jeden
+Auftrag in einem eigenen abbrechbaren CPU/INT8-Prozess auf Deutsch; das
+wiederholte Laden kostet Zeit. Es wird kein Audio dauerhaft gespeichert.
+
+Mikrofonzugriff erfolgt erst beim Klick in einem sicheren Browserkontext
+(localhost oder HTTPS). Aufnahme beenden fuellt das editierbare Textfeld;
+direktes Senden ist eine separate, standardmaessig ausgeschaltete Option.
+Die echten Mikrofon-, Modell- und durchgaengigen Sprachtests sind separat
+zu pruefen. Textchat bleibt bei deaktiviertem STT verfuegbar.
