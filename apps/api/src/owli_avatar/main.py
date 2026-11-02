@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import time
+from collections import deque
 
 from typing import Literal
 
@@ -13,8 +15,44 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+class ChatGuard:
+    def __init__(self, app):
+        self.app = app
+        self.requests = deque()
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or scope['path'] != '/api/chat' or scope['method'] != 'POST':
+            return await self.app(scope, receive, send)
+        now = time.monotonic()
+        while self.requests and now - self.requests[0] >= 60:
+            self.requests.popleft()
+        if len(self.requests) >= 60:
+            return await JSONResponse(status_code=429, content={'error': {'code': 'RATE_LIMIT', 'message': 'Too many requests'}})(scope, receive, send)
+        self.requests.append(now)
+        body = bytearray()
+        while True:
+            event = await receive()
+            if event['type'] == 'http.disconnect':
+                return
+            body.extend(event.get('body', b''))
+            if len(body) > 16384:
+                return await JSONResponse(status_code=413, content={'error': {'code': 'REQUEST_TOO_LARGE', 'message': 'Request is too large'}})(scope, receive, send)
+            if not event.get('more_body', False):
+                break
+        delivered = False
+        async def replay():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
+            return await receive()
+        await self.app(scope, replay, send)
+
+
 app = FastAPI(title="Owli Avatar MVP", version="0.1.0")
+app.add_middleware(ChatGuard)
 sessions = Sessions()
+active_provider_requests = 0
 
 
 def mode() -> str:
@@ -105,7 +143,18 @@ async def chat(payload: ChatRequest, request: Request) -> ChatResponse:
     selected = mode()
     if selected == "mock":
         return ChatResponse(reply=f"Mock-Antwort: Du hast gefragt: {message}", session_id=payload.session_id or "demo-session")
+    global active_provider_requests
     chat_provider = provider()
+    if active_provider_requests >= 4:
+        raise ProviderError("PROVIDER_BUSY", 503, "The text provider is busy")
+    active_provider_requests += 1
+    try:
+        return await ollama_chat(payload, request, message, chat_provider)
+    finally:
+        active_provider_requests -= 1
+
+
+async def ollama_chat(payload: ChatRequest, request: Request, message: str, chat_provider: OllamaProvider) -> ChatResponse:
     try:
         session_id, session = sessions.get(payload.session_id)
     except KeyError:

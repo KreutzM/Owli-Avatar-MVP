@@ -107,6 +107,20 @@ function appendMessage(who: string, value: string) {
   messages!.scrollTop = messages!.scrollHeight;
 }
 
+const modeLabel = document.querySelector<HTMLParagraphElement>('#chat-mode');
+void fetch('/api/health').then(async response => {
+  if (!response.ok) throw new Error('Health unavailable');
+  const health: unknown = await response.json();
+  const mode = (health as { mode?: unknown } | null)?.mode;
+  if (modeLabel && (mode === 'mock' || mode === 'ollama')) {
+    modeLabel.textContent = mode === 'ollama'
+      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet. Keine Spracherkennung oder TTS.'
+      : 'Mock-Modus: Antworten sind simuliert. Keine Spracherkennung oder TTS.';
+  }
+}).catch(() => {
+  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar. Keine Spracherkennung oder TTS.';
+});
+
 let sessionId: string | undefined;
 
 form.addEventListener('submit', async event => {

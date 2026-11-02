@@ -145,3 +145,39 @@ def test_invalid_mode_and_configuration(monkeypatch):
         result = client.post('/api/chat', json={'message': 'hi'})
         assert result.status_code == 503
         assert result.json()['error']['code'] == 'CONFIG_ERROR'
+
+
+def test_raw_request_limit():
+    with TestClient(app) as client:
+        result = client.post('/api/chat', json={'message': 'hello', 'extra': 'x' * 17000})
+    assert result.status_code == 413
+    assert result.json()['error']['code'] == 'REQUEST_TOO_LARGE'
+
+
+def test_provider_capacity_releases_on_error(monkeypatch):
+    import owli_avatar.main as main
+    monkeypatch.setenv('OWLI_MODE', 'ollama')
+    monkeypatch.setenv('OLLAMA_MODEL', 'local')
+    monkeypatch.setattr(main, 'active_provider_requests', 4)
+    with TestClient(app) as client:
+        result = client.post('/api/chat', json={'message': 'hi'})
+    assert result.status_code == 503
+    assert result.json()['error']['code'] == 'PROVIDER_BUSY'
+
+
+def test_rate_limit_and_window(monkeypatch):
+    from fastapi import FastAPI
+    from owli_avatar.main import ChatGuard
+    clock = [100.0]
+    monkeypatch.setattr('owli_avatar.main.time.monotonic', lambda: clock[0])
+    test_app = FastAPI()
+    test_app.add_middleware(ChatGuard)
+    @test_app.post('/api/chat')
+    async def ok():
+        return {'ok': True}
+    with TestClient(test_app) as client:
+        for _ in range(60):
+            assert client.post('/api/chat', json={}).status_code == 200
+        assert client.post('/api/chat', json={}).status_code == 429
+        clock[0] += 61
+        assert client.post('/api/chat', json={}).status_code == 200

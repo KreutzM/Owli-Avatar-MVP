@@ -80,3 +80,9 @@ test('API error can be retried successfully', async ({ page }) => {
   await expect(page.locator('#messages')).toContainText('Wieder da');
   await expect(page.locator('#send')).toBeEnabled();
 });
+
+test('health identifies Ollama mode before chat', async ({ page }) => {
+  await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok', mode: 'ollama' } }));
+  await page.goto('/');
+  await expect(page.locator('#chat-mode')).toContainText('Ollama-Modus');
+});
