@@ -1,7 +1,7 @@
 # Agent instructions — Owli Avatar MVP
 
 ## Mission / current state
-Build a local-first browser 3D owl avatar that listens/reads, sends text to an LLM, speaks TTS output and animates the beak. Eventually replace the test owl with the Owli mascot without rewriting the application. The repository currently contains **scaffolding only**; never report a working app, tested model, installed dependency, or server deployment until actually verified.
+Build a local-first browser 3D owl avatar that listens/reads, sends text to an LLM, speaks TTS output and animates the beak. The local mock chat supports the separately supplied Vuena original model; a later Owli mascot should remain interchangeable without rewriting the application. Live LLM, TTS and STT are not integrated. Report tests, model validation, dependencies and deployment only when actually verified.
 
 ## Decisions (do not re-litigate casually)
 - Browser: TypeScript + Three.js + Vite; no Unreal/React for MVP by default.
@@ -14,8 +14,8 @@ Build a local-first browser 3D owl avatar that listens/reads, sends text to an L
 ## How to work
 1. First identify the narrow task and relevant files. Read `docs/roadmap.md` for milestone scope; consult architecture/contracts/assets/server docs **only when involved**. Avoid whole-repo dumps and unrelated history.
 2. Terra (`gpt-6.1-terra`) is the coordinator/integrator. Delegate bounded reconnaissance, docs/source verification, isolated minor edits and independent review to `gpt-6-luna` agents when that saves main-agent context. For tiny tasks, work directly.
-3. Give subagents a self-contained question, exact file ownership, constraints, expected checks, and a short return format. Max two unfinished subagent threads; do not recursively delegate; do not let agents write the same file concurrently.
-4. Main agent owns architecture decisions, integration, PRs and final verification. A Luna reviewer is advisory; treat complex cross-component/security concerns as requiring additional main-agent verification. No agent's confidence substitutes for a test.
+3. Give subagents a self-contained question, role, start SHA, file and directory ownership, permitted temporary changes, checks, stop conditions, and a short return format. Explorers and researchers are read-only; builders write only within their assigned scope; reviewers independently inspect a fixed state without editing. Max two unfinished subagent threads; do not recursively delegate; do not let agents write the same file concurrently.
+4. Main agent owns architecture decisions, integration, PRs and final verification. A Luna reviewer is advisory; treat complex cross-component/security concerns as requiring additional main-agent verification. No agent's confidence substitutes for a test. Protect shared dependencies, symlinks, caches, artifacts and processes; use isolated workspaces for parallel writers. For visual changes, Terra personally reviews stills and the complete moving sequence, and records human design approval and accepted limitations.
 5. Prefer focused diffs, executable tests and reproducible evidence. One functional concern per PR when practical. Read `docs/codex-workflow.md` for larger work, review cap and handoffs.
 6. Progress reports: concise facts, exact tested/unverified scope, commit/PR links, blockers and next action. Never fabricate output or say a mock proved a live integration.
 
