@@ -107,6 +107,22 @@ function appendMessage(who: string, value: string) {
   messages!.scrollTop = messages!.scrollHeight;
 }
 
+const modeLabel = document.querySelector<HTMLParagraphElement>('#chat-mode');
+void fetch('/api/health').then(async response => {
+  if (!response.ok) throw new Error('Health unavailable');
+  const health: unknown = await response.json();
+  const mode = (health as { mode?: unknown } | null)?.mode;
+  if (modeLabel && (mode === 'mock' || mode === 'ollama')) {
+    modeLabel.textContent = mode === 'ollama'
+      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet. Keine Spracherkennung oder TTS.'
+      : 'Mock-Modus: Antworten sind simuliert. Keine Spracherkennung oder TTS.';
+  }
+}).catch(() => {
+  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar. Keine Spracherkennung oder TTS.';
+});
+
+let sessionId: string | undefined;
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const message = input.value.trim();
@@ -118,30 +134,40 @@ form.addEventListener('submit', async event => {
   setState('thinking');
   try {
     const controller = new AbortController();
-    const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 15000;
+    const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 65000;
     const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
     let response: Response;
     try {
       response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(sessionId ? { session_id: sessionId } : {}) }),
         signal: controller.signal,
       });
     } finally {
       window.clearTimeout(timeout);
     }
-    if (!response.ok) throw new Error('API HTTP ' + response.status);
-    const result = await response.json() as { reply: string; mode: string };
-    if (result.mode !== 'mock' || typeof result.reply !== 'string') {
+    if (!response.ok) {
+      if (response.status === 404) sessionId = undefined;
+      throw new Error('API HTTP ' + response.status);
+    }
+    const result: unknown = await response.json();
+    if (!result || typeof result !== 'object') throw new Error('Unexpected API response');
+    const chatResult = result as { reply?: unknown; mode?: unknown; session_id?: unknown };
+    if (typeof chatResult.reply !== 'string' || !chatResult.reply.trim()
+      || (chatResult.mode !== 'mock' && chatResult.mode !== 'ollama')
+      || typeof chatResult.session_id !== 'string' || !chatResult.session_id.trim()
+      || chatResult.session_id.length > 64) {
       throw new Error('Unexpected API response');
     }
+    sessionId = chatResult.session_id;
     setState('speaking'); // Visual simulation only; no TTS playback yet.
-    appendMessage('Eule (Mock)', result.reply);
+    notice.textContent = 'Sprechen wird nur visuell simuliert; es wird kein Ton ausgegeben.';
+    appendMessage(chatResult.mode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', chatResult.reply);
     await new Promise<void>(resolve => window.setTimeout(resolve, 700));
   } catch (error) {
     setState('error');
-    notice.textContent = 'Mock-API nicht erreichbar oder Antwort ungueltig. Backend lokal starten.';
+    notice.textContent = 'Chat-API nicht erreichbar oder Antwort ungueltig. Backend lokal starten und erneut versuchen.';
     console.error(error);
   } finally {
     setState('idle');

@@ -1,6 +1,6 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; keine Live-LLM-, TTS- oder STT-Integration.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog; keine Live-TTS- oder STT-Integration.**
 
 ## Ziel und Grenzen
 
@@ -57,3 +57,19 @@ Original-Idle und die Lider bleiben erhalten; der Jaw wird nach dem Mixer
 absolut zwischen Ruhepose und maximaler Original-Call-Stellung interpoliert.
 Die Bewegung beim Mock-Dialog ist synthetisch, ohne Audio oder Viseme. Eine
 öffentliche Weitergabe des Assets erfordert eine gesonderte Rechteprüfung.
+
+### Ollama-Textdialog
+
+Standard ist `OWLI_MODE=mock`. Fuer einen bereits laufenden lokalen Ollama-Dienst
+`OWLI_MODE=ollama`, `OLLAMA_BASE_URL=http://127.0.0.1:11434` und
+`OLLAMA_MODEL` auf ein vorhandenes Modell setzen, bevor das Backend gestartet
+wird. Vorhandene Modelle lassen sich mit `curl http://127.0.0.1:11434/api/tags`
+auflisten; es erfolgt kein Modelldownload oder Fallback. Nur HTTP-Loopback ist
+zulaessig. `OLLAMA_CONNECT_TIMEOUT` und `OLLAMA_TOTAL_TIMEOUT` konfigurieren
+die Timeouts in Sekunden (Standard 3 bzw. 60). Der Browser wartet standardmaessig
+65 Sekunden; `VITE_CHAT_TIMEOUT_MS` kann beim Webstart gesetzt werden.
+
+Sessions liegen begrenzt im Speicher eines einzelnen Backend-Prozesses und
+gehen bei Neustart verloren. Die Bewegung beim Antworten bleibt eine
+synthetische Simulation ohne Ton oder Viseme. Live-Ollama ist separat von
+Mock-CI und Browserabnahme zu pruefen.

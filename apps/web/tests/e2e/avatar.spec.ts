@@ -38,3 +38,51 @@ test('timed out API request allows retry', async ({ page }) => {
   await expect(page.locator('#notice')).toContainText('nicht erreichbar', { timeout: 6_000 });
   await expect(page.locator('#send')).toBeEnabled();
 });
+
+test('Ollama mode continues the returned session across turns', async ({ page }) => {
+  const requests: Array<{ message: string; session_id?: string }> = [];
+  await page.route('**/api/chat', async route => {
+    const payload = route.request().postDataJSON() as { message: string; session_id?: string };
+    requests.push(payload);
+    await route.fulfill({ json: {
+      reply: `Ollama-Antwort: ${payload.message}`,
+      session_id: 'ollama-session-1',
+      mode: 'ollama',
+    } });
+  });
+  await page.goto('/');
+  await page.locator('#message').fill('Erster Zug');
+  await page.locator('#send').click();
+  await expect(page.locator('#messages')).toContainText('Eule (Ollama): Ollama-Antwort: Erster Zug');
+  await page.locator('#message').fill('Zweiter Zug');
+  await page.locator('#send').click();
+  await expect(page.locator('#messages')).toContainText('Eule (Ollama): Ollama-Antwort: Zweiter Zug');
+  expect(requests).toEqual([
+    { message: 'Erster Zug' },
+    { message: 'Zweiter Zug', session_id: 'ollama-session-1' },
+  ]);
+  await expect(page.locator('#notice')).toContainText('kein Ton');
+});
+
+test('API error can be retried successfully', async ({ page }) => {
+  let attempts = 0;
+  await page.route('**/api/chat', async route => {
+    attempts += 1;
+    if (attempts === 1) return route.fulfill({ status: 503, body: 'unavailable' });
+    return route.fulfill({ json: { reply: 'Wieder da', session_id: 'retry-session', mode: 'mock' } });
+  });
+  await page.goto('/');
+  await page.locator('#message').fill('Retry');
+  await page.locator('#send').click();
+  await expect(page.locator('#notice')).toContainText('nicht erreichbar');
+  await page.locator('#message').fill('Retry erneut');
+  await page.locator('#send').click();
+  await expect(page.locator('#messages')).toContainText('Wieder da');
+  await expect(page.locator('#send')).toBeEnabled();
+});
+
+test('health identifies Ollama mode before chat', async ({ page }) => {
+  await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok', mode: 'ollama' } }));
+  await page.goto('/');
+  await expect(page.locator('#chat-mode')).toContainText('Ollama-Modus');
+});
