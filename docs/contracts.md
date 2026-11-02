@@ -1,15 +1,15 @@
-# Entwurfsvertraege (noch nicht implementiert)
+# API-Vertraege und geplante Erweiterungen
 
 ## REST API — v1 Entwurf
 Alle Serverendpunkte unter `/api`, JSON ausser Audio-Binary. Versionsbrueche bewusst versionieren; TypeScript- und Python-Vertraege gemeinsam testen.
 
-- `GET /api/health`: `{"status":"ok","mode":"mock"}` oder sinnvoll eingeschraenkte Degraded-Antwort. Keine internen Ports/Secrets preisgeben.
-- `POST /api/chat`: Eingabe `{"session_id":"optional","message":"..."}`; Ausgabe `{"reply":"...","session_id":"..."}`. Serverseitige Nutzereingabe-/Verlaufslimits, standardisierte Fehlerform.
+- `GET /api/health`: `{"status":"ok","mode":"mock"}` bzw. `mode: "ollama"` oder eine Fehlerantwort. Keine internen Ports/Secrets preisgeben.
+- `POST /api/chat`: Eingabe `{"session_id":"optional","message":"..."}`; Ausgabe `{"reply":"...","session_id":"..."}`. Antwort enthaelt zusaetzlich `mode: "mock" | "ollama"`. Eingabe maximal 1000 Zeichen; Ollama-Sessions sind zufaellig, pro Prozess und im Speicher, maximal 100 Sessions, 30 Minuten TTL, 12 Verlaufsnachrichten bzw. 12000 Zeichen. Unbekannte oder abgelaufene IDs liefern 404. Je Session nur eine laufende Anfrage. Bei Fehler oder Abbruch wird kein Turn gespeichert. Ollama-Antworten maximal 4000 Zeichen.
 - `POST /api/tts`: `{"text":"..."}` -> Audio (WAV fuer MVP) mit richtigem Content-Type. Dauer/Byte-Limit; nicht durch lange Texte blockieren.
 - `POST /api/stt`: Browser-Aufnahme (zugelassenes Audioformat; max. Dauer/Bytes) -> `{"text":"..."}`.
 - `GET /api/avatar/config`: semantische Modell-ID und Features/Capabilities, keine sensitiven Dateipfade.
 
-Fehlerform: `{"error":{"code":"...","message":"..."}}` mit passendem HTTP-Status. Von Anfang an ausstehende Anfrage, Timeout, Unterbrechung und den ausgeschalteten Provider beruecksichtigen.
+Fehlerform: `{"error":{"code":"...","message":"..."}}` mit passendem HTTP-Status. Ollama-Fehler und Timeouts werden ohne interne Details ausgegeben; Browserabbruch bricht die ausstehende Provideranfrage ab.
 
 ## Avatar-Contract — semantisch
 Interface (TS-Konzept; noch kein Quelltext):
