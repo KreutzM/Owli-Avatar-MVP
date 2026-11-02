@@ -2,6 +2,8 @@
 # Read-only capability checks: no installs, downloads or servers.
 set -uo pipefail
 cd "$(dirname "$0")/.."
+# Load optional user-local tool paths without changing the caller's shell.
+source scripts/dev-tools-env.sh
 failed=0
 check() {
   printf '\n== %s ==\n' "$1"
