@@ -19,6 +19,8 @@ class ChatGuard:
     def __init__(self, app):
         self.app = app
         self.requests = deque()
+        self.reading = 0
+        self.read_timeout = 5
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http' or scope['path'] != '/api/chat' or scope['method'] != 'POST':
@@ -29,16 +31,26 @@ class ChatGuard:
         if len(self.requests) >= 60:
             return await JSONResponse(status_code=429, content={'error': {'code': 'RATE_LIMIT', 'message': 'Too many requests'}})(scope, receive, send)
         self.requests.append(now)
+        if self.reading >= 8:
+            return await JSONResponse(status_code=503, content={'error': {'code': 'REQUEST_BUSY', 'message': 'Too many requests in progress'}})(scope, receive, send)
+        self.reading += 1
         body = bytearray()
-        while True:
-            event = await receive()
-            if event['type'] == 'http.disconnect':
-                return
-            body.extend(event.get('body', b''))
-            if len(body) > 16384:
-                return await JSONResponse(status_code=413, content={'error': {'code': 'REQUEST_TOO_LARGE', 'message': 'Request is too large'}})(scope, receive, send)
-            if not event.get('more_body', False):
-                break
+        try:
+            try:
+                async with asyncio.timeout(self.read_timeout):
+                    while True:
+                        event = await receive()
+                        if event['type'] == 'http.disconnect':
+                            return
+                        body.extend(event.get('body', b''))
+                        if len(body) > 16384:
+                            return await JSONResponse(status_code=413, content={'error': {'code': 'REQUEST_TOO_LARGE', 'message': 'Request is too large'}})(scope, receive, send)
+                        if not event.get('more_body', False):
+                            break
+            except TimeoutError:
+                return await JSONResponse(status_code=408, content={'error': {'code': 'REQUEST_TIMEOUT', 'message': 'Request timed out'}})(scope, receive, send)
+        finally:
+            self.reading -= 1
         delivered = False
         async def replay():
             nonlocal delivered

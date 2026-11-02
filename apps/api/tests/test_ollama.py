@@ -181,3 +181,53 @@ def test_rate_limit_and_window(monkeypatch):
         assert client.post('/api/chat', json={}).status_code == 429
         clock[0] += 61
         assert client.post('/api/chat', json={}).status_code == 200
+
+
+def test_slow_body_timeout_and_capacity():
+    from owli_avatar.main import ChatGuard
+    async def scenario():
+        async def app(scope, receive, send):
+            raise AssertionError('incomplete body reached app')
+        guard = ChatGuard(app)
+        guard.read_timeout = 0.02
+        statuses = []
+        async def receive():
+            await asyncio.sleep(10)
+        async def send(event):
+            if event['type'] == 'http.response.start':
+                statuses.append(event['status'])
+        scope = {'type': 'http', 'path': '/api/chat', 'method': 'POST'}
+        tasks = [asyncio.create_task(guard(scope, receive, send)) for _ in range(8)]
+        await asyncio.sleep(0)
+        await guard(scope, receive, send)
+        await asyncio.gather(*tasks)
+        assert statuses.count(503) == 1
+        assert statuses.count(408) == 8
+        assert guard.reading == 0
+    run(scenario())
+
+
+def test_parallel_provider_limit_and_cancel_release(monkeypatch):
+    import owli_avatar.main as main
+    async def scenario():
+        monkeypatch.setenv('OWLI_MODE', 'ollama')
+        monkeypatch.setattr(main, 'sessions', Sessions())
+        monkeypatch.setattr(main, 'active_provider_requests', 0)
+        class Fake:
+            async def generate(self, messages):
+                await asyncio.sleep(10)
+        class Request:
+            async def is_disconnected(self):
+                return False
+        monkeypatch.setattr(main, 'provider', lambda: Fake())
+        tasks = [asyncio.create_task(main.chat(main.ChatRequest(message='hi'), Request())) for _ in range(4)]
+        await asyncio.sleep(0.02)
+        with pytest.raises(ProviderError) as error:
+            await main.chat(main.ChatRequest(message='hi'), Request())
+        assert error.value.code == 'PROVIDER_BUSY'
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        assert main.active_provider_requests == 0
+        assert not main.sessions.items
+    run(scenario())
