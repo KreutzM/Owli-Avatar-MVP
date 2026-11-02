@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Load optional user-local tool paths without changing the caller's shell.
+source scripts/dev-tools-env.sh
 command -v python3 >/dev/null || { echo "Python 3 missing" >&2; exit 1; }
 command -v uv >/dev/null || { echo "uv missing: install uv 0.9.17 first" >&2; exit 1; }
 command -v npm >/dev/null || { echo "npm missing" >&2; exit 1; }

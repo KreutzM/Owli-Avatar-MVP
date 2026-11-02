@@ -52,11 +52,14 @@ bereits belegten Ports ab, statt fremde Server wiederzuverwenden.
 ### Ergebnis auf dem Entwicklungsrechner
 
 `uv 0.9.17` wurde in einer benutzereigenen virtuellen Umgebung unter
-`~/.local/share/owli-devtools/uv-0.9.17/bin` installiert; dieser Pfad muss fuer
-Bootstrap/Preflight im `PATH` stehen. Playwright 1.55.0 installierte Chromium
+`~/.local/share/owli-devtools/uv-0.9.17/bin` installiert. Bootstrap und
+Preflight verwenden diesen Pfad automatisch, falls `uv` sonst nicht im `PATH`
+liegt. Playwright 1.55.0 installierte Chromium
 140.0.7339.16 (Build 1187) nach `~/.cache/ms-playwright`. Der lokale Node-Wrapper
-verwendet sonst einen anderen Cache; fuer diesen Test wurde
-`PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"` explizit gesetzt.
+verwendet sonst einen anderen Cache; Preflight und Check waehlen den
+benutzereigenen Cache automatisch, wenn er existiert und
+`PLAYWRIGHT_BROWSERS_PATH` nicht bereits gesetzt ist. Explizite Einstellungen
+bleiben erhalten. Diese Erkennung installiert oder veraendert keine Tools.
 
 Mit diesen Einstellungen meldete der Preflight in der Codex-Sandbox alle Checks
 bis auf Chromium erfolgreich (Python 3.12.3, API-Python 3.14.7, Node 24.22.0,
