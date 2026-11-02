@@ -199,7 +199,7 @@ def tts_provider() -> PiperProvider:
     try:
         connect = float(os.getenv("PIPER_CONNECT_TIMEOUT", "3"))
         total = float(os.getenv("PIPER_TOTAL_TIMEOUT", "60"))
-        if not (0 < connect <= 30 and 0 < total <= 300):
+        if not (0 < connect <= 30 and 0 < total <= 60):
             raise ValueError
         return PiperProvider(os.getenv("PIPER_BASE_URL", "http://127.0.0.1:5000"), connect, total)
     except ValueError as exc:

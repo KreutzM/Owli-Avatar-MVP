@@ -72,3 +72,13 @@ def test_cancellation_releases_provider(monkeypatch):
         assert cancelled.is_set()
         assert main.active_tts_requests == 0
     asyncio.run(scenario())
+
+
+def test_tts_timeout_configuration_is_bounded(monkeypatch):
+    import owli_avatar.main as main
+    monkeypatch.setenv('OWLI_TTS_MODE', 'piper')
+    monkeypatch.setenv('PIPER_TOTAL_TIMEOUT', '61')
+    with TestClient(app) as client:
+        result = client.post('/api/tts', json={'text': 'Hallo'})
+    assert result.status_code == 503
+    assert result.json()['error']['code'] == 'TTS_CONFIG_ERROR'

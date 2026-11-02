@@ -80,7 +80,7 @@ Standard `OWLI_TTS_MODE=off`: Textchat funktioniert ohne TTS. Ein bereits
 separat laufender Piper-HTTP-Prozess kann mit `OWLI_TTS_MODE=piper` und
 `PIPER_BASE_URL=http://127.0.0.1:5000` beim API-Start konfiguriert werden.
 Nur HTTP-Loopback wird akzeptiert. `PIPER_CONNECT_TIMEOUT` und
-`PIPER_TOTAL_TIMEOUT` setzen Sekundenlimits (Standard 3 und 60). Es werden keine
+`PIPER_TOTAL_TIMEOUT` setzen Sekundenlimits (Standard 3 und 60; maximal 30 bzw. 60 Sekunden). Es werden keine
 Dienste gestartet oder Stimmen heruntergeladen. Aktivierung im Browser erfolgt
 ausdruecklich durch Nutzereingabe; Lautstaerke und Stop sind bedienbar.
 
