@@ -17,13 +17,17 @@
       </section>
       <section class="dialogue" aria-label="Chat mit der Eule">
         <h2>Lokaler Textchat</h2>
-        <p id="chat-mode">Chat-Modus wird ermittelt. Spracherkennung und TTS sind noch nicht integriert.</p>
+        <p id="chat-mode">Chat-Modus wird ermittelt.</p>
         <div id="messages" role="log" aria-live="polite"></div>
         <form id="chat-form">
           <label for="message">Deine Nachricht</label>
           <textarea id="message" name="message" maxlength="1000" rows="3" required></textarea>
           <button id="send" type="submit">Absenden</button>
         </form>
+        <button id="ptt" type="button" disabled>Aufnahme starten</button>
+        <button id="ptt-cancel" type="button" disabled>Aufnahme abbrechen</button>
+        <label><input type="checkbox" id="voice-auto-send" /> Erkannten Text direkt senden</label>
+        <p id="stt-status" role="status">Spracheingabe wird geprüft.</p>
         <label><input type="checkbox" id="speech-enabled" disabled /> Sprachausgabe aktivieren</label>
         <label for="volume">Lautstärke</label>
         <input type="range" id="volume" min="0" max="1" step="0.1" value="1" />
