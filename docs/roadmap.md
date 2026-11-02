@@ -1,6 +1,6 @@
 # Roadmap / Abnahmekriterien
 
-**Projektstatus 2026-10-31:** Mock-API und lokal bereitgestelltes Vuena-Originalmodell mit Idle, Blinzeln und synthetischer Jaw-Steuerung. Ollama-Textprovider optional; Live-Nachweis separat. Keine Live-TTS/STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
+**Projektstatus 2026-10-31:** Mock-API und lokal bereitgestelltes Vuena-Originalmodell mit Idle, Blinzeln und synthetischer Jaw-Steuerung. Ollama-Textprovider optional; Live-Nachweis separat. Piper-TTS optional implementiert, Live-Stimme separat zu pruefen; keine STT-Integration. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
 
 ## Phase 1 — Mock End-to-End Grundgeruest
 - Vite/TypeScript/Three.js, Python FastAPI, testbare Provider-Vertraege und deterministische Mocks anlegen.

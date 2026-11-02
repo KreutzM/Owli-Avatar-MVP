@@ -5,7 +5,7 @@ Alle Serverendpunkte unter `/api`, JSON ausser Audio-Binary. Versionsbrueche bew
 
 - `GET /api/health`: `{"status":"ok","mode":"mock"}` bzw. `mode: "ollama"` oder eine Fehlerantwort. Keine internen Ports/Secrets preisgeben.
 - `POST /api/chat`: Eingabe `{"session_id":"optional","message":"..."}`; Ausgabe `{"reply":"...","session_id":"..."}`. Antwort enthaelt zusaetzlich `mode: "mock" | "ollama"`. Eingabe maximal 1000 Zeichen und 16 KiB Roh-Request und fuenf Sekunden fuer dessen Eingang; hoechstens acht parallele Body-Lesevorgaenge; pro Prozess maximal 60 Chat-Anfragen pro Minute und vier parallele Ollama-Anfragen; Ollama-Sessions sind zufaellig, pro Prozess und im Speicher, maximal 100 Sessions, 30 Minuten TTL, 12 Verlaufsnachrichten bzw. 12000 Zeichen. Unbekannte oder abgelaufene IDs liefern 404. Je Session nur eine laufende Anfrage. Bei Fehler oder Abbruch wird kein Turn gespeichert. Ollama-Antworten maximal 4000 Zeichen.
-- `POST /api/tts`: `{"text":"..."}` -> Audio (WAV fuer MVP) mit richtigem Content-Type. Dauer/Byte-Limit; nicht durch lange Texte blockieren.
+- `POST /api/tts`: `{"text":"..."}` (1–4000 Zeichen) -> PCM-WAV mit `audio/wav` und `Cache-Control: no-store`; maximal 10 MiB und 30 s Audio. Standard `OWLI_TTS_MODE=off` liefert 501. `GET /api/tts/status` meldet nur `enabled`. Der TTS-Request teilt Body-, Zeit- und Rate-Limits mit Chat; maximal zwei parallele Synthesen pro Prozess. Timeout, Abbruch und Providerfehler geben Ressourcen frei und legen keine Rohdaten ab.
 - `POST /api/stt`: Browser-Aufnahme (zugelassenes Audioformat; max. Dauer/Bytes) -> `{"text":"..."}`.
 - `GET /api/avatar/config`: semantische Modell-ID und Features/Capabilities, keine sensitiven Dateipfade.
 
