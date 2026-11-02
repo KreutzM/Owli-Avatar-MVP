@@ -1,6 +1,6 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: funktionsfaehiger Mock-Chat mit prozeduralem WebGL-Platzhalter; noch kein reales Eulenmodell und keine Live-Sprache.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; keine Live-LLM-, TTS- oder STT-Integration.**
 
 ## Ziel und Grenzen
 
@@ -16,7 +16,7 @@ Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM
 1. Repo auf dem Entwicklungsrechner/Ubuntu-Server klonen und ins Repo wechseln.
 2. `codex --version` und `codex --strict-config` ausfuehren. Falls die CLI den Schalter nicht kennt: `codex --help` pruefen.
 3. Neue Codex-Session starten; `/model`, `/status` und `/permissions` kontrollieren. Erwartung: Hauptagent `gpt-6.1-terra` / `medium`, Subagents standardmaessig `gpt-6-luna` / `low`.
-4. `AGENTS.md` lesen. Mit `docs/roadmap.md` beginnen und **nur Phase 1** als ersten Umsetzungsauftrag starten.
+4. `AGENTS.md` lesen. Mit `docs/roadmap.md` beginnen und den naechsten abgegrenzten Auftrag anhand des aktuellen Projektstands waehlen.
 5. Nach gezielten Aenderungen: `python3 scripts/check_foundation.py`. Nach `bash scripts/bootstrap.sh`: `bash scripts/check.sh`; fuer Chromium nach `npx playwright install chromium` auch `bash scripts/check.sh --browser`.
 
 Die Projektkonfiguration ist in `.codex/config.toml` und den Rollen unter `.codex/agents/` versioniert. **Verfuegbarkeit von Modellen und Konfigurationswirksamkeit muessen auf der tatsaechlichen Codex-CLI bestaetigt werden**; dieses Repo startet hier keine Codex-Session.
