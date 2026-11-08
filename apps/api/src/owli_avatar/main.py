@@ -133,6 +133,7 @@ async def diagnostic_timing(request: Request, call_next):
     return response
 
 
+_DIAGNOSTIC_REQUESTS: deque[float] = deque()
 _DIAGNOSTIC_KEYS = frozenset({
     "capture_to_upload_ms", "upload_ms", "stt_request_ms", "stt_ms", "chat_request_ms",
     "ollama_ms", "tts_request_ms", "piper_ms", "capture_to_playback_ms", "fps",
@@ -143,6 +144,12 @@ _DIAGNOSTIC_KEYS = frozenset({
 async def diagnostics(request: Request) -> Response:
     if os.getenv("OWLI_DIAGNOSTICS") != "1":
         raise HTTPException(status_code=404)
+    now = time.monotonic()
+    while _DIAGNOSTIC_REQUESTS and now - _DIAGNOSTIC_REQUESTS[0] >= 60:
+        _DIAGNOSTIC_REQUESTS.popleft()
+    if len(_DIAGNOSTIC_REQUESTS) >= 10:
+        raise HTTPException(status_code=429)
+    _DIAGNOSTIC_REQUESTS.append(now)
     # Strict, bounded, numeric-only data: no transcript, ID or arbitrary log text.
     if request.headers.get("content-type", "").split(";", 1)[0] != "application/json":
         raise HTTPException(status_code=415)

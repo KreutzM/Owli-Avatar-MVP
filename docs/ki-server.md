@@ -150,7 +150,8 @@ Testsession beim Runner-Start `OWLI_DIAGNOSTICS=1` und
 direktes Senden aktivieren. Fuer erfolgreiche Sprachdialoge schreibt die API
 eine Zeile `OWLI_METRICS` mit ausschliesslich numerischen Werten in die
 Standardausgabe. Keine Texte, Audioinhalte oder Session-IDs werden in diesen
-Messdaten erfasst. Die Diagnose-API ist ohne Opt-in deaktiviert.
+Messdaten erfasst. Die Diagnose-API ist ohne Opt-in deaktiviert, auf zehn Anfragen pro Minute
+begrenzt und ueber den HTTPS-LAN-Eingang nicht erreichbar.
 
 Browserzeiten verwenden `performance.now()`: Beginn ist der Aufruf von
 `MediaRecorder.stop()`, nicht der (asynchrone) Eingang der letzten Audiodaten.

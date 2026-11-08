@@ -5,6 +5,8 @@ from owli_avatar.main import app
 
 
 def test_diagnostics_disabled_and_strict_numeric(monkeypatch, capsys):
+    from owli_avatar.main import _DIAGNOSTIC_REQUESTS
+    _DIAGNOSTIC_REQUESTS.clear()
     monkeypatch.delenv("OWLI_DIAGNOSTICS", raising=False)
     with TestClient(app) as client:
         assert client.post("/api/diagnostics", json={"capture_to_playback_ms": 42}).status_code == 404
@@ -38,3 +40,15 @@ def test_provider_timing_only_when_enabled(monkeypatch):
         assert response.status_code == 200
         assert response.headers["server-timing"].startswith("upload;dur=")
         assert ", stt;dur=" in response.headers["server-timing"]
+
+
+
+def test_diagnostics_rate_limit(monkeypatch):
+    from owli_avatar.main import _DIAGNOSTIC_REQUESTS
+    _DIAGNOSTIC_REQUESTS.clear()
+    monkeypatch.setenv("OWLI_DIAGNOSTICS", "1")
+    with TestClient(app) as client:
+        for _ in range(10):
+            assert client.post("/api/diagnostics", json={"capture_to_playback_ms": 1}).status_code == 204
+        assert client.post("/api/diagnostics", json={"capture_to_playback_ms": 1}).status_code == 429
+    _DIAGNOSTIC_REQUESTS.clear()

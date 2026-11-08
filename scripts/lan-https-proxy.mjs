@@ -25,6 +25,9 @@ const server = https.createServer({ cert: fs.readFileSync(cert), key: fs.readFil
   res.setHeader('X-Content-Type-Options', 'nosniff');
   let url;
   try { url = new URL(req.url, 'https://local.invalid'); } catch { res.writeHead(400).end(); return; }
+  let decodedPath;
+  try { decodedPath = decodeURIComponent(url.pathname); } catch { res.writeHead(400).end(); return; }
+  if (decodedPath === '/api/diagnostics') { res.writeHead(404).end(); return; }
   if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
     const headers = { ...req.headers, host: `127.0.0.1:${apiPort}` };
     for (const name of ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto']) delete headers[name];

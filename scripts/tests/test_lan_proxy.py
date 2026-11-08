@@ -62,6 +62,12 @@ class LanProxyTest(unittest.TestCase):
                 with self.assertRaises(urllib.error.HTTPError) as error:
                     urllib.request.urlopen(f"https://127.0.0.1:{port}/%2e%2e/private.txt", context=context)
                 self.assertEqual(error.exception.code, 404)
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(f"https://127.0.0.1:{port}/api/diagnostics", context=context)
+                self.assertEqual(error.exception.code, 404)
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(f"https://127.0.0.1:{port}/api/%64iagnostics", context=context)
+                self.assertEqual(error.exception.code, 404)
             finally:
                 process.terminate()
                 process.wait(timeout=5)
