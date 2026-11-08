@@ -21,3 +21,79 @@ Laut dessen Dokumentationsstand Oktober 2026: Ubuntu 24.04 headless, Ryzen 5 560
 ## Performance
 Browser-Hardware rendert GLB; serverseitige Vega 7 ist fuer LLM/TTS/STT relevant, nicht fuer Three.js im Browser. Qwen3-TTS bleibt spaetere Option; fuer niedrige Latenz Piper separat evaluieren, gemessene Werte statt Annahmen.
 
+
+## Projektbezogener Start und Stop
+
+Voraussetzungen sind die bereits vorhandene API-Umgebung und Web-Abhaengigkeiten
+(siehe `scripts/bootstrap.sh`; Installation und Downloads nur nach Freigabe).
+Das Skript liest keine `.env` automatisch. Es startet weder Ollama noch Piper
+und installiert oder laedt keine Modelle. Fuer einen Mock-Start:
+
+```sh
+OWLI_MODE=mock OWLI_TTS_MODE=off OWLI_STT_MODE=off bash scripts/run-dev.sh
+```
+
+Fuer den Live-Betrieb vorhandenes Ollama und einen separat gestarteten
+Piper-HTTP-Provider voraussetzen. In derselben Shell explizit konfigurieren:
+
+```sh
+export OWLI_MODE=ollama OLLAMA_MODEL='<vorhandenes Modell>' OLLAMA_THINK=false
+export OLLAMA_BASE_URL=http://127.0.0.1:11434
+export OWLI_TTS_MODE=piper PIPER_BASE_URL=http://127.0.0.1:5000
+export OWLI_STT_MODE=faster-whisper STT_MODEL_PATH='<absolutes lokales Modellverzeichnis>'
+bash scripts/run-dev.sh
+```
+
+STT braucht die zusaetzlich installierten Python-Pakete faster-whisper und
+PyAV und die drei in README beschriebenen Modelldateien. Ein Modell unter
+`/tmp` kann beim Neustart oder durch das Betriebssystem entfernt werden;
+einen dauerhaften privaten Speicherort und freien Platz vorab selbst pruefen.
+Keine Gewichte, Stimmen oder lokalen Pfade ins Git aufnehmen.
+
+Das Skript prueft Modi, lokale Origins, Modelldateien und bindbare Ports 8765
+und 5173. Die Portpruefung ist keine Reservierung; bei einem Startkonflikt
+bricht der jeweilige Prozess ab. Sie prueft weder die Erreichbarkeit noch das
+Modell oder die Rechte externer Provider. API und Vite laufen auf Loopback.
+Im Terminal Ctrl-C beendet die vom Skript gestarteten Prozesse. Bereits
+laufende Piper- und Ollama-Dienste werden nicht beendet. Ausgaben verbleiben
+im Terminal; private Eingaben und Aufnahmen nicht in Betriebsprotokolle kopieren.
+Ein Absturz oder SIGKILL kann eine manuelle Pruefung erfordern: nur eindeutig
+diesem Start zugeordnete Prozesse beenden, niemals pauschal nach Namen.
+
+Bei Fehlern zuerst Konfiguration, Modelldateien, Paketverfuegbarkeit und
+Portbelegung pruefen; belegte Ports nicht durch Beenden fremder Prozesse
+freimachen. Ein erfolgreicher Preflight belegt keine Inferenz oder Tonwiedergabe.
+
+## Windows und geplanter HTTPS-LAN-Test
+
+Der funktional abgenommene Weg bleibt ein bestehender SSH-Localhost-Tunnel
+vom Windows-Rechner zum Loopback-Webport 5173; der Windows-Browser oeffnet
+`http://localhost:5173`. Vite leitet `/api` auf die Loopback-API weiter.
+SSH-Einstellungen und Zugangsdaten stammen aus der bestehenden privaten
+Host-Dokumentation. Browser-Mikrofonzugriff braucht eine Nutzerfreigabe und
+einen sicheren Kontext; localhost erfuellt diese Bedingung.
+
+Ein direkter Zugang ist noch nicht eingerichtet oder getestet. Vorschlag:
+temporarer Reverse-Proxy auf einer ausgewaehlten privaten LAN-Schnittstelle
+und einem unprivilegierten Port, Weiterleitung nur an Vite auf Loopback,
+Client-IP eingeschraenkt, ohne Routerfreigabe. Ein lokal erzeugtes Zertifikat
+muss zum verwendeten Namen oder zur Adresse passen und auf dem Windows-Client
+gezielt vertraut werden. TLS schuetzt den Transport; IP-Filter sind keine
+starke Client-Authentifizierung. Ohne weitere Authentifizierung ist ein
+vertrauenswuerdiges Heimnetz erforderlich. Zertifikatsschluessel privat halten.
+Nach dem Test Proxy beenden und das gezielt installierte Vertrauen sowie die
+Testschluessel entfernen. Konkrete Software, Bindung und Zertifikatsverfahren
+sind vor Ausfuehrung zu pruefen; LAN-Listener und Windows-Zertifikatsspeicher
+erfordern gesonderte Freigabe. Firewall, DNS, SSH und systemd bleiben unveraendert.
+Die tatsaechliche Zertifikatspruefung, `window.isSecureContext` und
+Mikrofonfreigabe auf Windows sind noch nicht nachgewiesen.
+
+## Messstand
+
+Fuer Phase 6 liegen in diesem Stand keine neuen Messungen von STT, Ollama,
+Piper, Browser-Wiedergabestart, Gesamtantwortlatenz, CPU, Peak-RAM oder FPS
+vor. Die subjektive Phase-5-Schaetzung ist kein instrumentierter Messwert.
+Drei vergleichbare gesprochene Dialoge und ihre Median-/Spannweiten sowie
+klar definierte Messgrenzen bleiben offen; Server- und Browserzeiten ohne
+synchronisierte Uhren nicht addieren. Standardbetrieb protokolliert keine
+eigens aktivierten Timingdaten.

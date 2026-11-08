@@ -31,9 +31,11 @@
 - Nutzerabnahme: Mikrofon, editierbares Transkript, Direktversand, Stop/Abbruch, hoerbare Antwort und Idle-Rueckkehr persoenlich bestaetigt. Die geschaetzten drei Sekunden bis zur Antwort sind eine subjektive Beobachtung, keine praezise Messung bis zum ersten Ton. Die technische Jaw-Rotation wurde gemessen; ihre subtile optische Auspraegung am Originalmodell ist akzeptiert.
 
 ## Phase 6 — Integration und Leistungsbewertung
-- Reproduzierbarer Serverstart erst nach expliziter Freigabe; keine Systemdienste still aendern.
+- Projektbezogenen Start und Stop ohne Systemdienst vorbereiten; Host- und LAN-Aenderungen nur nach gesonderter Freigabe.
 - Messwerte: First-response/TTFA, TTS-s/Audio-s, Peak RAM, Browser FPS, Audio-Video-Sync und Fehlerfaelle.
 - Abnahme: Nutzerseitige Sicht-/Hoerprobe + dokumentierter Rueckweg.
 
 **Arbeitsmodus:** Eine klar abgegrenzte Phase/PR zuerst. Phasen nicht als implementiert markieren, bevor Check und Live-Beleg vorliegen.
 
+
+Phase 6 bleibt offen, bis reale Messungen, Windows-Zugang und Nutzerabnahme fuer den jeweiligen Aufbau nachgewiesen sind. Phase-5-Abnahme ersetzt keine Latenzmessung.
