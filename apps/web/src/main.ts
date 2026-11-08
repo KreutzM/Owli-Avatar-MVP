@@ -85,7 +85,7 @@ const audioPlayer = new AudioPlayer({ onEnded: () => {
   const values = Object.fromEntries(Object.entries(metrics.values).filter(([, value]) => Number.isFinite(value)));
   dialogueMetrics = undefined;
   // Numeric timing only: no prompt, transcript, audio, or session ID.
-  void fetch('/api/diagnostics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values), keepalive: true }).catch(() => undefined);
+  void fetch('/api/diagnostics', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' }, body: JSON.stringify(values), keepalive: true }).catch(() => undefined);
 }});
 function stopSpeech(): void {
   speechGeneration++;
@@ -148,7 +148,7 @@ async function transcribe(blob: Blob, generation: number): Promise<void> {
   if (metrics) addTiming(metrics, 'capture_to_upload_ms', metrics.captureEndedAt, requestStarted);
   const timeout = window.setTimeout(() => controller.abort(), 125000);
   try {
-    const response = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'audio/webm;codecs=opus' }, body: blob, signal: controller.signal });
+    const response = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'audio/webm;codecs=opus', 'X-Owli-Request': '1' }, body: blob, signal: controller.signal });
     if (!response.ok) throw new Error('STT unavailable');
     const sttProviderMs = serverDuration(response, 'stt');
     const uploadMs = serverDuration(response, 'upload');
@@ -309,7 +309,7 @@ form.addEventListener('submit', async event => {
     try {
       response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' },
         body: JSON.stringify({ message, ...(sessionId ? { session_id: sessionId } : {}) }),
         signal: controller.signal,
       });
@@ -344,7 +344,7 @@ form.addEventListener('submit', async event => {
       const synthTimeout = window.setTimeout(() => synth.abort(), 65000);
       const ttsStarted = performance.now();
       try {
-        const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: chatResult.reply }), signal: synth.signal });
+        const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' }, body: JSON.stringify({ text: chatResult.reply }), signal: synth.signal });
         if (!response.ok) throw new Error('TTS HTTP ' + response.status);
         const piperProviderMs = serverDuration(response, 'piper');
         const wav = await response.arrayBuffer();

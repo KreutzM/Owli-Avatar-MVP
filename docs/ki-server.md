@@ -110,58 +110,46 @@ vorhanden; ein etablierter Reverse-Proxy ist dort nicht vorhanden. Ein
 isolierter Loopback-Test pruefte TLS, die Weiterleitung und Dateigrenzen;
 der reale Test ist davon als gesonderter Nachweis zu unterscheiden.
 
-Geplant ist ein unprivilegierter Port 8443 auf genau der zuvor lokal
-geprueften privaten LAN-IPv4-Adresse, nicht auf einer Wildcard-Adresse.
-Kein Login und keine Client-IP-Filterung: Alle Geraete, die den Endpunkt
-erreichen, koennen Owli und seine API verwenden. Das schliesst das Ausloesen
-von Inferenz und die Einsicht in die eigene Sitzung ein. Die Firewall war zum
-Pruefzeitpunkt nicht aktiv; der Zugriff auf den Port ist daher nicht durch
-eine Host-Firewall auf bestimmte Geraete eingeschraenkt. Keine Routerfreigabe
-einrichten; vorhandene Routerregeln wurden hier nicht geprueft. Der private
-Schluessel der Test-CA muss privat bleiben. Eine kompromittierte CA koennte
-fuer weitere Zertifikate missbraucht werden.
+Fuer den geplanten Dauerbetrieb verwendet der HTTPS-Eingang Port 8443
+auf einer konkreten privaten LAN-IPv4-Adresse und eine explizite Begrenzung
+auf das Heimnetz-Subnetz. Es gibt auf Wunsch des Nutzers kein Passwort:
+Alle Geraete im erlaubten Netz koennen Owli und die API benutzen. Die
+Netzbegrenzung authentifiziert keine Geraete. Es werden keine Router-,
+Firewall-, DNS- oder SSH-Aenderungen automatisch vorgenommen; die bestehenden
+Routerregeln muessen vor Aktivierung geprueft werden.
 
-Nach gesonderter Freigabe, mit bereits gestarteter API und in einem eigenen
-Terminal (keine Platzhalterwerte ins Git eintragen):
+Die bestehende Test-CA, das Serverzertifikat und das Windows-Vertrauen sollen
+erhalten bleiben. Beide Zertifikate laufen am 8. Dezember 2026 ab; eine
+Erneuerung der Vertrauenskette und Windows-Aenderungen erfordern eine
+gesonderte Freigabe. Der CA-Schluessel wird fuer den laufenden Proxy nicht
+gebraucht. Die vorhandenen privaten Schluessel nicht ins Git kopieren.
 
+Ein manueller Probeaufruf ist nach gesonderter Freigabe des LAN-Listeners
+mit einem bereits lokal gebauten Web-Verzeichnis moeglich. Er verwendet die
+bestehenden Serverzertifikate und setzt voraus, dass die API bereits auf
+Loopback laeuft. Platzhalter sind durch private lokale Werte zu ersetzen:
 ```sh
-umask 077
-OWLI_TEST_DIR=$(mktemp -d /tmp/owli-https-test.XXXXXXXX)
-printf 'Testverzeichnis: %s\n' "$OWLI_TEST_DIR"
-OWLI_LAN_IPV4='<zuvor gepruefte LAN-IPv4 des Servers>'
-openssl req -x509 -newkey rsa:3072 -nodes -sha256 -days 30 \
-  -keyout "$OWLI_TEST_DIR/ca.key" -out "$OWLI_TEST_DIR/ca.crt" \
-  -subj '/CN=Owli lokaler Test CA' \
-  -addext 'basicConstraints=critical,CA:TRUE' \
-  -addext 'keyUsage=critical,keyCertSign,cRLSign'
-openssl req -new -newkey rsa:2048 -nodes -sha256 \
-  -keyout "$OWLI_TEST_DIR/server.key" -out "$OWLI_TEST_DIR/server.csr" \
-  -subj '/CN=Owli lokaler Test'
-printf 'subjectAltName=IP:%s\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n' "$OWLI_LAN_IPV4" > "$OWLI_TEST_DIR/server.ext"
-openssl x509 -req -in "$OWLI_TEST_DIR/server.csr" -CA "$OWLI_TEST_DIR/ca.crt" \
-  -CAkey "$OWLI_TEST_DIR/ca.key" -CAcreateserial -days 30 -sha256 \
-  -extfile "$OWLI_TEST_DIR/server.ext" -out "$OWLI_TEST_DIR/server.crt"
-(cd apps/web && npm run build -- --outDir "$OWLI_TEST_DIR/web")
-OWLI_HTTPS_BIND="$OWLI_LAN_IPV4" OWLI_HTTPS_PORT=8443 \
-  OWLI_HTTPS_CERT="$OWLI_TEST_DIR/server.crt" OWLI_HTTPS_KEY="$OWLI_TEST_DIR/server.key" \
-  OWLI_WEB_DIST="$OWLI_TEST_DIR/web" node scripts/lan-https-proxy.mjs
+OWLI_HTTPS_BIND='<LAN-IPv4 im bestehenden Serverzertifikat>' \
+OWLI_ALLOWED_CIDR='<Heimnetz in CIDR-Notation>' \
+OWLI_HTTPS_PORT=8443 \
+OWLI_HTTPS_CERT='<Pfad zum vorhandenen Serverzertifikat>' \
+OWLI_HTTPS_KEY='<Pfad zum vorhandenen Server-Schluessel>' \
+OWLI_WEB_DIST='<absoluter Pfad zum Web-Build>' \
+node scripts/lan-https-proxy.mjs
 ```
+Die CIDR-Angabe muss zur Bindungsadresse passen; ohne gueltige Angabe startet
+der Proxy nicht. Der Zugangsschutz verwendet die direkte Quelladresse der
+Verbindung. Zustandsaendernde API-Anfragen werden zusaetzlich auf den
+erwarteten Browser-Origin und einen projektspezifischen Header geprueft.
+Im Proxy-Terminal beendet Ctrl-C ausschliesslich diesen Prozess. Der
+SSH-Localhost-Tunnel bleibt als Fallback verfuegbar.
 
-Nur `ca.crt` per bestehendem SSH/SCP zum Windows-PC kopieren. Die Ausgabe von
-`sha256sum "$OWLI_TEST_DIR/ca.crt"` mit `certutil -hashfile <ca.crt> SHA256`
-auf Windows vergleichen und den Hash ueber einen getrennten vertrauten Kanal
-bestaetigen. Nach
-Freigabe im Benutzerkonto vertrauen: `certutil -user -addstore Root <ca.crt>`.
-CA-Fingerabdruck davor mit `certutil -dump <ca.crt>` notieren. Browser unter
-`https://<LAN-IP>:8443/` oeffnen und Zertifikatswarnungsfreiheit,
-`window.isSecureContext` sowie Mikrofonfreigabe pruefen; Browser koennen eigene
-Zertifikatsspeicher nutzen. HTTPS alleine ist keine Zugriffskontrolle.
-Rueckbau: im Proxy-Terminal Ctrl-C; auf jedem betroffenen Windows-Konto
-`certutil -user -delstore Root <exakter-CA-Fingerabdruck>`; nur das eigene
-`OWLI_TEST_DIR` nach Pruefung seines Inhalts entfernen. Danach ggf. den
-abgenommenen SSH-Tunnel nutzen. Keine Firewall-, DNS-, SSH-, systemd- oder
-globale Proxy-Konfiguration aendern. Der Schritt ist erst nach Freigabe
-auszufuehren.
+Systemweite Dienste, Dienstkonto und Host-Konfiguration gehoeren in das
+private KI-Server-Repository. Dessen Vorgehen verlangt kleine nachvollziehbare
+Aenderungen und ausdrueckliche Freigabe vor Bereitstellung; vorhandene
+Dienste und dortige lokale Aenderungen bleiben unangetastet. Die aktuelle
+Architektur und die noch benoetigten Freigaben stehen im
+[Phase-7-Plan](phase-7-operations-plan.md).
 
 ## Messung
 
