@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VuenaCharacterAdapter, type CharacterAdapter, type CharacterState } from './avatar/character';
 import { AudioPlayer } from './audio/AudioPlayer';
+import { PushToTalk } from './audio/PushToTalk';
 import './style.css';
 
 type AvatarState = CharacterState;
@@ -16,7 +17,11 @@ const speechEnabled = document.querySelector<HTMLInputElement>('#speech-enabled'
 const stopAudioButton = document.querySelector<HTMLButtonElement>('#stop-audio');
 const speechStatus = document.querySelector<HTMLParagraphElement>('#speech-status');
 const volume = document.querySelector<HTMLInputElement>('#volume');
-if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !speechStatus || !volume) {
+const ptt = document.querySelector<HTMLButtonElement>('#ptt');
+const pttCancel = document.querySelector<HTMLButtonElement>('#ptt-cancel');
+const sttStatus = document.querySelector<HTMLParagraphElement>('#stt-status');
+const autoSend = document.querySelector<HTMLInputElement>('#voice-auto-send');
+if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !speechStatus || !volume || !ptt || !pttCancel || !sttStatus || !autoSend) {
   throw new Error('Required UI elements missing');
 }
 
@@ -79,6 +84,74 @@ void fetch('/api/tts/status').then(async response => {
     speechStatus.textContent = 'Sprachausgabe verfügbar; bitte aktivieren.';
   } else speechStatus.textContent = 'Sprachausgabe deaktiviert; Textchat bleibt verfügbar.';
 }).catch(() => { speechStatus.textContent = 'Sprachausgabe nicht verfügbar; Textchat bleibt verfügbar.'; });
+let captureGeneration = 0;
+let sttRequest: AbortController | undefined;
+let recording = false;
+let sttAvailable = false;
+const capture = new PushToTalk({
+  onRecording: active => {
+    recording = active;
+    ptt!.textContent = active ? 'Aufnahme beenden' : 'Aufnahme starten';
+    if (active) { setState('listening'); sttStatus!.textContent = 'Aufnahme läuft.'; }
+  },
+  onTranscribing: blob => { void transcribe(blob, captureGeneration); },
+  onError: () => {
+    sttStatus!.textContent = 'Mikrofon nicht verfügbar oder Aufnahme fehlgeschlagen. Texteingabe bleibt möglich.';
+    ptt!.disabled = !sttAvailable; pttCancel!.disabled = true;
+    send!.disabled = false; setState('idle');
+  },
+});
+function cancelCapture(): void {
+  captureGeneration++;
+  sttRequest?.abort(); sttRequest = undefined;
+  capture.cancel();
+  ptt!.disabled = !sttAvailable; pttCancel!.disabled = true;
+  send!.disabled = false; setState('idle');
+}
+async function transcribe(blob: Blob, generation: number): Promise<void> {
+  if (generation !== captureGeneration || disposed) return;
+  setState('thinking'); ptt!.disabled = true;
+  sttStatus!.textContent = 'Sprache wird erkannt …';
+  const controller = new AbortController(); sttRequest = controller;
+  const timeout = window.setTimeout(() => controller.abort(), 125000);
+  try {
+    const response = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'audio/webm;codecs=opus' }, body: blob, signal: controller.signal });
+    if (!response.ok) throw new Error('STT unavailable');
+    const result: unknown = await response.json();
+    const text = (result as {text?: unknown} | null)?.text;
+    if (typeof text !== 'string' || text.length > 1000) throw new Error('Invalid transcription');
+    if (generation !== captureGeneration || disposed) return;
+    input!.value = text;
+    sttStatus!.textContent = text.trim() ? 'Erkannten Text prüfen oder senden.' : 'Keine Sprache erkannt.';
+    setState('idle'); send!.disabled = false; pttCancel!.disabled = true; ptt!.disabled = !sttAvailable;
+    if (text.trim() && autoSend!.checked) form!.requestSubmit();
+  } catch {
+    if (generation === captureGeneration && !disposed) {
+      sttStatus!.textContent = 'Spracherkennung fehlgeschlagen. Texteingabe bleibt möglich.';
+      setState('idle'); send!.disabled = false; pttCancel!.disabled = true; ptt!.disabled = !sttAvailable;
+    }
+  } finally {
+    window.clearTimeout(timeout);
+    if (sttRequest === controller) sttRequest = undefined;
+  }
+}
+ptt.addEventListener('click', () => {
+  if (recording) { ptt.disabled = true; void capture.stop().catch(() => undefined); return; }
+  if (send.disabled || !sttAvailable) return;
+  stopSpeech();
+  if (speechEnabled.checked && !speechEnabled.disabled) void audioPlayer.initialize().catch(() => undefined);
+  captureGeneration++; send.disabled = true; ptt.disabled = true; pttCancel.disabled = false;
+  sttStatus.textContent = 'Mikrofonberechtigung wird angefordert …';
+  void capture.start().then(() => { if (recording) ptt.disabled = false; }).catch(() => undefined);
+});
+pttCancel.addEventListener('click', () => { cancelCapture(); sttStatus.textContent = 'Aufnahme abgebrochen.'; });
+void fetch('/api/stt/status').then(async response => {
+  if (!response.ok) throw new Error('STT status unavailable');
+  const status = await response.json() as {enabled?: unknown};
+  sttAvailable = status.enabled === true;
+  ptt.disabled = !sttAvailable;
+  sttStatus.textContent = sttAvailable ? 'Spracheingabe bereit.' : 'Spracheingabe deaktiviert; Texteingabe bleibt möglich.';
+}).catch(() => { sttStatus.textContent = 'Spracheingabe nicht verfügbar; Texteingabe bleibt möglich.'; });
 host.dataset.character = 'loading';
 if (renderer) new GLTFLoader().load('/models/vuena-owl.glb', gltf => {
   if (disposed) return;
@@ -127,6 +200,8 @@ function animate() {
 if (renderer) animate();
 window.addEventListener('pagehide', () => {
   disposed = true;
+  cancelCapture();
+  capture.dispose();
   stopSpeech();
   audioPlayer.dispose();
   character?.dispose();
@@ -149,11 +224,11 @@ void fetch('/api/health').then(async response => {
   const mode = (health as { mode?: unknown } | null)?.mode;
   if (modeLabel && (mode === 'mock' || mode === 'ollama')) {
     modeLabel.textContent = mode === 'ollama'
-      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet. Keine Spracherkennung.'
-      : 'Mock-Modus: Antworten sind simuliert. Keine Spracherkennung.';
+      ? 'Ollama-Modus: Nachrichten werden lokal vom Sprachmodell verarbeitet.'
+      : 'Mock-Modus: Antworten sind simuliert.';
   }
 }).catch(() => {
-  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar. Keine Spracherkennung.';
+  if (modeLabel) modeLabel.textContent = 'Chat-Modus nicht verfügbar.';
 });
 
 let sessionId: string | undefined;

@@ -62,11 +62,61 @@ class ChatGuard:
         await self.app(scope, replay, send)
 
 
+class STTGuard:
+    """Bound untrusted raw audio before FastAPI reads the body."""
+    def __init__(self, app):
+        self.app = app
+        self.requests = deque()
+        self.reading = 0
+        self.read_timeout = 10
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or scope['path'] != '/api/stt' or scope['method'] != 'POST':
+            return await self.app(scope, receive, send)
+        now = time.monotonic()
+        while self.requests and now - self.requests[0] >= 60:
+            self.requests.popleft()
+        if len(self.requests) >= 20:
+            return await JSONResponse(status_code=429, content={'error': {'code': 'RATE_LIMIT', 'message': 'Too many requests'}})(scope, receive, send)
+        self.requests.append(now)
+        if self.reading >= 2:
+            return await JSONResponse(status_code=503, content={'error': {'code': 'REQUEST_BUSY', 'message': 'Too many requests in progress'}})(scope, receive, send)
+        self.reading += 1
+        body = bytearray()
+        try:
+            try:
+                async with asyncio.timeout(self.read_timeout):
+                    while True:
+                        event = await receive()
+                        if event['type'] == 'http.disconnect':
+                            return
+                        chunk = event.get('body', b'')
+                        if len(body) + len(chunk) > 5 * 1024 * 1024:
+                            return await JSONResponse(status_code=413, content={'error': {'code': 'REQUEST_TOO_LARGE', 'message': 'Request is too large'}})(scope, receive, send)
+                        body.extend(chunk)
+                        if not event.get('more_body', False):
+                            break
+            except TimeoutError:
+                return await JSONResponse(status_code=408, content={'error': {'code': 'REQUEST_TIMEOUT', 'message': 'Request timed out'}})(scope, receive, send)
+        finally:
+            self.reading -= 1
+        delivered = False
+        async def replay():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {'type': 'http.request', 'body': bytes(body), 'more_body': False}
+            return await receive()
+        await self.app(scope, replay, send)
+
+
 app = FastAPI(title="Owli Avatar MVP", version="0.1.0")
 app.add_middleware(ChatGuard)
+app.add_middleware(STTGuard)
 sessions = Sessions()
 active_provider_requests = 0
 active_tts_requests = 0
+active_stt_requests = 0
 
 
 def mode() -> str:
@@ -82,7 +132,7 @@ def provider() -> OllamaProvider:
         total = float(os.getenv("OLLAMA_TOTAL_TIMEOUT", "60"))
         if not (0 < connect <= 30 and 0 < total <= 300):
             raise ValueError
-        return OllamaProvider(os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"), os.getenv("OLLAMA_MODEL", ""), connect, total)
+        return OllamaProvider(os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"), os.getenv("OLLAMA_MODEL", ""), connect, total, think=os.getenv("OLLAMA_THINK", "auto"))
     except ValueError as exc:
         raise ProviderError("CONFIG_ERROR", 503, "Chat is not configured correctly") from exc
 
@@ -241,7 +291,50 @@ async def tts(request: Request, payload: TTSRequest | None = None) -> Response:
         active_tts_requests -= 1
 
 
-@app.post("/api/stt", status_code=501)
-def stt_not_implemented() -> dict[str, str]:
-    raise HTTPException(status_code=501, detail="STT is not implemented")
+def stt_mode() -> str:
+    value = os.getenv("OWLI_STT_MODE", "off")
+    if value not in ("off", "faster-whisper"):
+        raise ProviderError("STT_CONFIG_ERROR", 503, "Speech recognition is not configured correctly")
+    return value
 
+
+@app.get("/api/stt/status")
+def stt_status() -> dict[str, bool]:
+    return {"enabled": stt_mode() == "faster-whisper"}
+
+
+@app.post("/api/stt")
+async def stt(request: Request) -> JSONResponse:
+    if stt_mode() == "off":
+        raise HTTPException(status_code=501, detail="STT is disabled")
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if content_type != "audio/webm":
+        raise ProviderError("UNSUPPORTED_AUDIO", 415, "Unsupported audio format")
+    audio = await request.body()
+    if not audio or not audio.startswith(b"\x1a\x45\xdf\xa3"):
+        raise ProviderError("INVALID_AUDIO", 422, "Invalid audio")
+    global active_stt_requests
+    if active_stt_requests >= 1:
+        raise ProviderError("STT_BUSY", 503, "Speech recognition is busy")
+    from .stt import FasterWhisperProvider
+    try:
+        timeout = float(os.getenv("STT_TIMEOUT", "60"))
+        if not (0 < timeout <= 120):
+            raise ValueError
+        recognizer = FasterWhisperProvider(os.getenv("STT_MODEL_PATH", ""), timeout=timeout)
+    except ValueError as exc:
+        raise ProviderError("STT_CONFIG_ERROR", 503, "Speech recognition is not configured correctly") from exc
+    active_stt_requests += 1
+    task = asyncio.create_task(recognizer.transcribe(audio))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.1)
+            if not task.done() and await request.is_disconnected():
+                raise asyncio.CancelledError
+        text = await task
+        return JSONResponse({"text": text}, headers={"Cache-Control": "no-store"})
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        active_stt_requests -= 1
