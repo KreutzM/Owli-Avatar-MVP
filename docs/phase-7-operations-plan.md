@@ -16,8 +16,9 @@ erhalten.
   sind nicht gegen Neustart oder Betriebssystembereinigung abgesichert.
   Der Runner startet API und Vite, aber keinen Piper-Dienst.
 - Node und OpenSSL sind vorhanden. Der getestete HTTPS-Proxy liefert einen
-  Web-Build und leitet /api an Loopback weiter, hat aber keinen Login.
-  Fuer Dauerbetrieb darf dieser ungeschuetzte Testmodus nicht verwendet werden.
+  Web-Build und leitet /api an Loopback weiter. Der Nutzer hat entschieden,
+  fuer Owli kein Passwort einzurichten; alle PCs im Heimnetz sollen Zugriff
+  haben.
 - Ollama ist aktiv und das gewaehlte Modell vorhanden. Die vorgeschlagenen
   Owli-Unit- und Dienstkonto-Namen waren bei der lesenden Pruefung frei.
   Das vorhandene Benutzerkonto ist Mitglied der sudo-Gruppe; User-Units
@@ -30,31 +31,33 @@ erhalten.
 
 ## Architekturvorschlag
 
-Ein gemeinsames, starkes Owli-Passwort fuer alle gewuenschten Heimnetz-PCs,
-einmal je Browser eingeben und auf Wunsch dort speichern. HTTPS und eine
-Anmeldung schuetzen alle Inhalte und API-Endpunkte. Keine einzelnen
-Client-Zertifikate und keine starren Client-IP-Listen. Die Zugangsdaten werden
-nicht an FastAPI oder Piper weitergeleitet und nicht protokolliert. Ohne
-korrekt konfigurierte Authentifizierung startet kein LAN-Eingang. Es gibt
-keinen automatischen Gast- oder ungeschuetzten Fallback.
+Der Nutzer wuenscht fuer Owli keine Passwoerter; alle PCs im privaten
+Heimnetz sollen den Zugang nutzen koennen. Der HTTPS-Eingang verwendet daher
+keine Anmeldung und keine Client-Zertifikate. Fuer den Dauerbetrieb wird
+vorgeschlagen, den Zugang auf das vor Ort explizit konfigurierte private
+Heimnetz-Subnetz zu begrenzen. Die Entscheidung verwendet ausschliesslich die
+direkte Netzwerk-Quelladresse der Verbindung, niemals vom Client gesetzte
+Forwarded-Header; eine fehlende oder fehlerhafte Subnetzkonfiguration
+verhindert den Start. Der Schutz muss vor statischen Dateien und API-Endpunkten
+greifen und automatisiert auf zulaessige und abgelehnte Quelladressen
+geprueft werden. Die tatsaechliche Durchsetzung wird spaeter im Heimnetz
+ueberprueft. Kein Eingriff in die Host-Firewall ist dafuer vorgesehen.
 
-Die bevorzugte Umsetzung ist HTTPS-Basic-Auth im vorhandenen Node-Eingang,
-mit starkem, zufaelligem Passwort, gesalzenem Passwortverifier in einer
-privaten 0600-Datei, gleichfoermiger Vergleichspruefung und Begrenzung
-fehlgeschlagener Anmeldungen. Ein gemeinsam genutztes Passwort identifiziert
-keine einzelnen Personen; Browser koennen es zwischenspeichern. Das ist ein
-bewusster Kompromiss fuer einfachen Heimnetzzugang, kein Mehrbenutzerkonzept.
-Weil Browser Basic-Zugangsdaten automatisch mitsenden koennen, muessen
-zustandsaendernde API-Anfragen zusaetzlich gegen Cross-Site-Requests
-abgesichert werden: zulässige Origin exakt pruefen und einen projektspezifischen
-Request-Header verlangen; CORS-Anfragen fremder Origins ablehnen. Das
-Zusammenspiel von Login, Browser, CSRF-Schutz und Fehlermeldungen wird mit
-unabhaengigen Tests nachgewiesen, bevor LAN-Betrieb freigegeben wird.
+Diese Begrenzung ist keine Authentifizierung: Jedes Geraet im zugelassenen
+Netz kann die Oberflaeche und API verwenden und Ressourcen ausloesen.
+Insbesondere schuetzt sie nicht vor anderen oder kompromittierten Geraeten
+im Heimnetz. Damit wird die fruehere Issue-19-Vorgabe, beliebige LAN-Nutzer
+durch Anmeldung auszuschliessen, auf ausdruecklichen Wunsch des Nutzers
+geaendert. HTTPS schuetzt den Transport und ermoeglicht Mikrofonzugriff;
+es identifiziert keine Benutzer.
+
+Zustandsaendernde API-Anfragen muessen unabhaengig von einer Anmeldung
+gegen Cross-Site-Requests geschuetzt werden: zulaessige Origin exakt pruefen,
+einen projektspezifischen Request-Header verlangen und CORS-Anfragen fremder
+Origins ablehnen. DNS-Rebinding, Subnetzgrenzen, Anfragelimits und
+Fehlermeldungen sind vor einer LAN-Freigabe unabhaengig zu testen.
 Die Diagnostik bleibt im Normalbetrieb aus und ihr Endpunkt am LAN-Eingang
-gesperrt. Es werden keine Texte, Audioinhalte, Tokens oder Auth-Header geloggt.
-Weiterhin gilt: ein kompromittiertes Heimnetzgeraet oder gemeinsam bekanntes
-Passwort kann die Anwendung verwenden; TLS schuetzt keine kompromittierten
-Endgeraete.
+gesperrt. Es werden keine Texte, Audioinhalte, Tokens oder Session-IDs geloggt.
 
 Der einzige externe Einstieg bindet an die bestaetigte private IPv4-Adresse
 und Port 8443; keine Wildcard-Adresse. FastAPI und der eigene Piper-Prozess
@@ -126,8 +129,8 @@ ungetestete Sandbox sind keine Isolation.
 
 Reihenfolge allein beweist keine Bereitschaft: API und Eingang pruefen ihre
 jeweiligen Voraussetzungen mit zeitlicher Grenze. Bei belegten Ports,
-fehlenden Dateien, ungueltiger Auth oder Zertifikaten wird der eigene Start
-abgebrochen. Ollama bleibt eine externe Abhaengigkeit; weder Start, Restart,
+fehlenden Dateien, ungueltiger Netzbegrenzung oder Zertifikaten wird der
+eigene Start abgebrochen. Ollama bleibt eine externe Abhaengigkeit; weder Start, Restart,
 Stop noch Konfiguration des Ollama-Dienstes sind Teil des Owli-Betriebs.
 Ausfall fuehrt zu nachvollziehbaren Fehlern und manuellem oder begrenztem
 Retry, nicht zu unbegrenzten Neustartschleifen.
@@ -168,10 +171,11 @@ SSH-Localhost-Forwarding bleibt der Fallback.
 
 ## Nachweise vor Freigabe
 
-- Mock-CI und unabhängiger Review: Authentifizierung fuer statische Dateien
-  und API, Rate-Limit, Cross-Site-Request-Schutz, fehlende/ungueltige Secrets,
-  Timeouts, keine Secret-Leaks, Loopback-Upstreams, Portkonflikte und kontrolliertes
-  Stop-/Restart-Verhalten.
+- Mock-CI und unabhängiger Review: Schutz statischer Dateien und der API
+  durch die konfigurierte Netzgrenze, Rate-Limit, Cross-Site-Request-Schutz,
+  ungueltige oder fehlende Netzkonfiguration, Timeouts, keine Secret-Leaks,
+  Loopback-Upstreams, Portkonflikte und kontrolliertes Stop-/Restart-Verhalten.
+  Keine Behauptung, dass damit einzelne LAN-Geraete authentifiziert werden.
 - In isolierter lokaler Umgebung ohne echte Modelle: reproduzierbarer
   Build, explizite Betriebskonfiguration, Dienstdatei-Syntax und Fehlerszenarien.
 - Erst nach gesonderter Aktivierungsfreigabe: mehrere eigene Start-/Stop- und
