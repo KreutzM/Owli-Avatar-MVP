@@ -77,16 +77,30 @@ test('STT error returns to text input', async ({page}) => {
 });
 
 test('cancel during transcription keeps the form usable and ignores late results', async ({page}) => {
+  let releaseResponse!: () => void;
+  let received = false;
+  let settleResponse!: () => void;
+  const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
+  const responseSettled = new Promise<void>(resolve => { settleResponse = resolve; });
   await page.route('**/api/stt', async route => {
-    await new Promise(resolve => setTimeout(resolve, 900));
+    received = true;
+    await responseGate;
     await route.fulfill({json:{text:'Zu spät'}}).catch(() => undefined);
+    settleResponse();
   });
-  await configure(page); await page.click('#ptt'); await page.click('#ptt');
-  await expect(page.locator('#stt-status')).toContainText('erkannt');
-  await page.click('#ptt-cancel'); await page.waitForTimeout(1000);
-  await expect(page.locator('#message')).toHaveValue('');
-  await expect(page.locator('#state')).toContainText('idle');
-  await expect(page.locator('#send')).toBeEnabled();
+  try {
+    await configure(page); await page.click('#ptt'); await page.click('#ptt');
+    await expect.poll(() => received).toBe(true);
+    await expect(page.locator('#ptt-cancel')).toBeEnabled();
+    await page.click('#ptt-cancel');
+    releaseResponse();
+    await responseSettled;
+    await expect(page.locator('#message')).toHaveValue('');
+    await expect(page.locator('#state')).toContainText('idle');
+    await expect(page.locator('#send')).toBeEnabled();
+  } finally {
+    releaseResponse();
+  }
 });
 
 test('pagehide stops active microphone tracks', async ({page}) => {
