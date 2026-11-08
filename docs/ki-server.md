@@ -51,9 +51,8 @@ einen dauerhaften privaten Speicherort und freien Platz vorab selbst pruefen.
 Keine Gewichte, Stimmen oder lokalen Pfade ins Git aufnehmen.
 
 Das Skript prueft Modi, lokale Origins, Modelldateien und bindbare Ports 8765
-und 5173. Die Portpruefung ist keine Reservierung; bei einem Startkonflikt
-bricht der jeweilige Prozess ab. Sie prueft weder die Erreichbarkeit noch das
-Modell oder die Rechte externer Provider. API und Vite laufen auf Loopback.
+und 5173 sowie STT-Imports, den Ollama-Modellkatalog und die TCP-Erreichbarkeit von Piper. Die Portpruefung ist keine Reservierung; bei einem Startkonflikt
+bricht der jeweilige Prozess ab. Sie prueft weder eine Piper-Synthese noch die Rechte externer Modelle oder Stimmen. API und Vite laufen auf Loopback.
 Im Terminal Ctrl-C beendet die vom Skript gestarteten Prozesse. Bereits
 laufende Piper- und Ollama-Dienste werden nicht beendet. Ausgaben verbleiben
 im Terminal; private Eingaben und Aufnahmen nicht in Betriebsprotokolle kopieren.

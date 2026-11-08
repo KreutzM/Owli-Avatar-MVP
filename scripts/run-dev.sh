@@ -27,6 +27,7 @@ case "${OWLI_STT_MODE:-off}" in off|faster-whisper) ;; *) fail 'OWLI_STT_MODE mu
 if [[ "${OWLI_STT_MODE:-off}" == faster-whisper ]]; then
   model="${STT_MODEL_PATH:-}"
   [[ -n "$model" && "$model" == /* && -d "$model" ]] || fail 'STT_MODEL_PATH must be an existing absolute model directory'
+  apps/api/.venv/bin/python -c "import av, faster_whisper" || fail 'STT requires PyAV and faster-whisper in the API environment'
   for file in config.json model.bin tokenizer.json; do
     [[ -f "$model/$file" && -r "$model/$file" ]] || fail "STT model is missing readable $file"
   done
@@ -37,6 +38,33 @@ if [[ "${OWLI_MODE:-mock}" == ollama ]]; then
 fi
 if [[ "${OWLI_TTS_MODE:-off}" == piper ]]; then
   [[ "${PIPER_BASE_URL:-http://127.0.0.1:5000}" == http://127.0.0.1:* || "${PIPER_BASE_URL:-http://127.0.0.1:5000}" == http://localhost:* ]] || fail 'Piper origin must use HTTP loopback'
+fi
+
+# Check existing loopback services without starting, stopping, or changing them.
+if [[ "${OWLI_MODE:-mock}" == ollama || "${OWLI_TTS_MODE:-off}" == piper ]]; then
+  apps/api/.venv/bin/python - <<'PYCODE' || fail 'live provider preflight failed'
+import json, os, socket, sys, urllib.parse, urllib.request
+def origin(value):
+    u = urllib.parse.urlsplit(value)
+    if u.scheme != 'http' or u.hostname not in ('127.0.0.1', 'localhost') or u.username or u.password or u.path not in ('', '/') or u.query or u.fragment:
+        raise ValueError('provider origin must be a plain HTTP loopback origin')
+    return u
+try:
+    if os.getenv('OWLI_MODE', 'mock') == 'ollama':
+        u = origin(os.getenv('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'))
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(f'http://{u.netloc}/api/tags', timeout=3) as response:
+            data = json.load(response)
+        if not any(item.get('name') == os.getenv('OLLAMA_MODEL') for item in data.get('models', [])):
+            raise ValueError('configured Ollama model was not listed')
+    if os.getenv('OWLI_TTS_MODE', 'off') == 'piper':
+        u = origin(os.getenv('PIPER_BASE_URL', 'http://127.0.0.1:5000'))
+        with socket.create_connection((u.hostname, u.port or 80), timeout=3):
+            pass
+except (OSError, ValueError, TypeError, AttributeError) as exc:
+    print(f'Provider check failed: {exc}', file=sys.stderr)
+    sys.exit(1)
+PYCODE
 fi
 
 # Probe fixed application ports without touching any existing listener.
