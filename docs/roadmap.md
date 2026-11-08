@@ -38,4 +38,4 @@
 **Arbeitsmodus:** Eine klar abgegrenzte Phase/PR zuerst. Phasen nicht als implementiert markieren, bevor Check und Live-Beleg vorliegen.
 
 
-Phase 6 bleibt offen, bis reale Messungen, Windows-Zugang und Nutzerabnahme fuer den jeweiligen Aufbau nachgewiesen sind. Phase-5-Abnahme ersetzt keine Latenzmessung.
+Phase 6: Drei lokale Sprachdialoge ueber den abgenommenen SSH-Tunnel wurden instrumentiert; Messgrenzen und Werte stehen in docs/ki-server.md. Der direkte HTTPS-LAN-Zugang und dessen Windows-Abnahme bleiben bis zum tatsaechlichen Test offen.

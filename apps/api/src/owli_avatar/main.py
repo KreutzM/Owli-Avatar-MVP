@@ -2,6 +2,8 @@
 
 import asyncio
 import os
+import json
+import math
 import time
 from collections import deque
 
@@ -83,6 +85,7 @@ class STTGuard:
             return await JSONResponse(status_code=503, content={'error': {'code': 'REQUEST_BUSY', 'message': 'Too many requests in progress'}})(scope, receive, send)
         self.reading += 1
         body = bytearray()
+        started = time.perf_counter()
         try:
             try:
                 async with asyncio.timeout(self.read_timeout):
@@ -100,6 +103,8 @@ class STTGuard:
                 return await JSONResponse(status_code=408, content={'error': {'code': 'REQUEST_TIMEOUT', 'message': 'Request timed out'}})(scope, receive, send)
         finally:
             self.reading -= 1
+        if os.getenv("OWLI_DIAGNOSTICS") == "1":
+            scope.setdefault("state", {})["upload_timing"] = (time.perf_counter() - started) * 1000
         delivered = False
         async def replay():
             nonlocal delivered
@@ -113,6 +118,54 @@ class STTGuard:
 app = FastAPI(title="Owli Avatar MVP", version="0.1.0")
 app.add_middleware(ChatGuard)
 app.add_middleware(STTGuard)
+
+@app.middleware("http")
+async def diagnostic_timing(request: Request, call_next):
+    response = await call_next(request)
+    if os.getenv("OWLI_DIAGNOSTICS") == "1":
+        timing = getattr(request.state, "provider_timing", None)
+        if timing:
+            values = [f"{timing[0]};dur={timing[1]:.3f}"]
+            upload = getattr(request.state, "upload_timing", None)
+            if timing[0] == "stt" and upload is not None:
+                values.insert(0, f"upload;dur={upload:.3f}")
+            response.headers["Server-Timing"] = ", ".join(values)
+    return response
+
+
+_DIAGNOSTIC_KEYS = frozenset({
+    "capture_to_upload_ms", "upload_ms", "stt_request_ms", "stt_ms", "chat_request_ms",
+    "ollama_ms", "tts_request_ms", "piper_ms", "capture_to_playback_ms", "fps",
+})
+
+
+@app.post("/api/diagnostics", status_code=204)
+async def diagnostics(request: Request) -> Response:
+    if os.getenv("OWLI_DIAGNOSTICS") != "1":
+        raise HTTPException(status_code=404)
+    # Strict, bounded, numeric-only data: no transcript, ID or arbitrary log text.
+    if request.headers.get("content-type", "").split(";", 1)[0] != "application/json":
+        raise HTTPException(status_code=415)
+    raw = bytearray()
+    try:
+        async with asyncio.timeout(5):
+            async for chunk in request.stream():
+                raw.extend(chunk)
+                if len(raw) > 2048:
+                    raise HTTPException(status_code=413)
+    except TimeoutError:
+        raise HTTPException(status_code=408)
+    try:
+        data = json.loads(raw)
+        if not isinstance(data, dict) or "capture_to_playback_ms" not in data or not set(data) <= _DIAGNOSTIC_KEYS:
+            raise ValueError
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1_000_000 for value in data.values()):
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        raise HTTPException(status_code=422)
+    print("OWLI_METRICS " + json.dumps(data, separators=(",", ":"), allow_nan=False), flush=True)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
+
 sessions = Sessions()
 active_provider_requests = 0
 active_tts_requests = 0
@@ -230,7 +283,10 @@ async def ollama_chat(payload: ChatRequest, request: Request, message: str, chat
     async with session.lock:
         try:
             messages = [*session.messages, {"role": "user", "content": message}]
+            started = time.perf_counter()
             reply = await generate_until_disconnect(request, chat_provider, messages)
+            if os.getenv("OWLI_DIAGNOSTICS") == "1":
+                request.state.provider_timing = ("ollama", (time.perf_counter() - started) * 1000)
             sessions.add_turn(session, message, reply)
             return ChatResponse(reply=reply, session_id=session_id, mode="ollama")
         finally:
@@ -276,6 +332,7 @@ async def tts(request: Request, payload: TTSRequest | None = None) -> Response:
         raise ProviderError("TTS_BUSY", 503, "Speech synthesis is busy")
     speech = tts_provider()
     active_tts_requests += 1
+    started = time.perf_counter()
     task = asyncio.create_task(speech.synthesize(payload.text.strip()))
     try:
         while not task.done():
@@ -283,6 +340,8 @@ async def tts(request: Request, payload: TTSRequest | None = None) -> Response:
             if not task.done() and await request.is_disconnected():
                 raise asyncio.CancelledError
         audio = await task
+        if os.getenv("OWLI_DIAGNOSTICS") == "1":
+            request.state.provider_timing = ("piper", (time.perf_counter() - started) * 1000)
         return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
     finally:
         if not task.done():
@@ -321,10 +380,11 @@ async def stt(request: Request) -> JSONResponse:
         timeout = float(os.getenv("STT_TIMEOUT", "60"))
         if not (0 < timeout <= 120):
             raise ValueError
-        recognizer = FasterWhisperProvider(os.getenv("STT_MODEL_PATH", ""), timeout=timeout)
+        recognizer = FasterWhisperProvider(os.getenv("STT_MODEL_PATH", ""), timeout=timeout, **({"python_executable": os.environ["STT_PYTHON"]} if os.getenv("STT_PYTHON") else {}))
     except ValueError as exc:
         raise ProviderError("STT_CONFIG_ERROR", 503, "Speech recognition is not configured correctly") from exc
     active_stt_requests += 1
+    started = time.perf_counter()
     task = asyncio.create_task(recognizer.transcribe(audio))
     try:
         while not task.done():
@@ -332,6 +392,8 @@ async def stt(request: Request) -> JSONResponse:
             if not task.done() and await request.is_disconnected():
                 raise asyncio.CancelledError
         text = await task
+        if os.getenv("OWLI_DIAGNOSTICS") == "1":
+            request.state.provider_timing = ("stt", (time.perf_counter() - started) * 1000)
         return JSONResponse({"text": text}, headers={"Cache-Control": "no-store"})
     finally:
         if not task.done():

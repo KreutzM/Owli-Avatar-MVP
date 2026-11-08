@@ -7,6 +7,8 @@ export interface AudioPlayerOptions {
   releaseSeconds?: number;
   /** Called once when the current source ends naturally. */
   onEnded?: () => void;
+  /** Called immediately after source.start() schedules playback on the Web Audio clock. */
+  onPlaybackScheduled?: () => void;
 }
 
 /**
@@ -29,12 +31,14 @@ export class AudioPlayer {
   private readonly attackSeconds: number;
   private readonly releaseSeconds: number;
   private readonly onEnded?: () => void;
+  private readonly onPlaybackScheduled?: () => void;
 
   constructor(options: AudioPlayerOptions = {}) {
     this.noiseGate = Math.max(0, options.noiseGate ?? 0.025);
     this.attackSeconds = Math.max(0.001, options.attackSeconds ?? 0.035);
     this.releaseSeconds = Math.max(0.001, options.releaseSeconds ?? 0.16);
     this.onEnded = options.onEnded;
+    this.onPlaybackScheduled = options.onPlaybackScheduled;
   }
 
   /** Must be invoked from a user gesture to satisfy browser autoplay policies. */
@@ -85,6 +89,7 @@ export class AudioPlayer {
       };
       this.source = source;
       source.start();
+      this.onPlaybackScheduled?.();
     } catch (error) {
       if (this.isCurrent(generation)) {
         this.stopSource();

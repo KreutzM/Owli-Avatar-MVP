@@ -44,6 +44,7 @@ jobs:
       - run: uv sync --project apps/api --frozen --extra dev
       - run: npm ci --no-audit --no-fund
         working-directory: apps/web
+      - run: python3 -m unittest scripts.tests.test_run_dev scripts.tests.test_lan_proxy -v
       - run: npm run build
         working-directory: apps/web
       - run: npx playwright install --with-deps chromium
@@ -52,6 +53,11 @@ jobs:
         working-directory: apps/web
         env:
           CI: "true"
+      - run: npx playwright test tests/e2e/diagnostics.spec.ts --config playwright.diagnostics.config.ts
+        working-directory: apps/web
+        env:
+          CI: "true"
+          OWLI_DIAGNOSTICS_E2E: "1"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

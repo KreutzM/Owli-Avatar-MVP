@@ -6,6 +6,20 @@ import { PushToTalk } from './audio/PushToTalk';
 import './style.css';
 
 type AvatarState = CharacterState;
+type DialogueMetrics = { captureEndedAt: number; values: Record<string, number> };
+const diagnosticsEnabled = import.meta.env.VITE_OWLI_DIAGNOSTICS === '1';
+let dialogueMetrics: DialogueMetrics | undefined;
+let currentFps = Number.NaN;
+function serverDuration(response: Response, name: string): number | undefined {
+  for (const item of (response.headers.get('server-timing') ?? '').split(',')) {
+    const match = item.trim().match(new RegExp(`^${name};\\s*dur=([0-9]+(?:\\.[0-9]+)?)$`, 'i'));
+    if (match) return Number(match[1]);
+  }
+  return undefined;
+}
+function addTiming(metrics: DialogueMetrics | undefined, key: string, start: number, end: number): void {
+  if (metrics && Number.isFinite(start) && Number.isFinite(end) && end >= start) metrics.values[key] = end - start;
+}
 const host = document.querySelector<HTMLDivElement>('#avatar');
 const stateLabel = document.querySelector<HTMLSpanElement>('#state');
 const form = document.querySelector<HTMLFormElement>('#chat-form');
@@ -63,6 +77,15 @@ const audioPlayer = new AudioPlayer({ onEnded: () => {
   setState('idle');
   stopAudioButton!.disabled = true;
   speechStatus.textContent = 'Wiedergabe beendet.';
+}, onPlaybackScheduled: () => {
+  const metrics = dialogueMetrics;
+  if (!diagnosticsEnabled || !metrics) return;
+  addTiming(metrics, 'capture_to_playback_ms', metrics.captureEndedAt, performance.now());
+  if (Number.isFinite(currentFps)) metrics.values.fps = currentFps;
+  const values = Object.fromEntries(Object.entries(metrics.values).filter(([, value]) => Number.isFinite(value)));
+  dialogueMetrics = undefined;
+  // Numeric timing only: no prompt, transcript, audio, or session ID.
+  void fetch('/api/diagnostics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values), keepalive: true }).catch(() => undefined);
 }});
 function stopSpeech(): void {
   speechGeneration++;
@@ -73,8 +96,8 @@ function stopSpeech(): void {
   stopAudioButton!.disabled = true;
   setState('idle');
 }
-stopAudioButton.addEventListener('click', () => { stopSpeech(); speechStatus.textContent = 'Wiedergabe gestoppt.'; });
-speechEnabled.addEventListener('change', () => { if (!speechEnabled.checked) stopSpeech(); });
+stopAudioButton.addEventListener('click', () => { dialogueMetrics = undefined; stopSpeech(); speechStatus.textContent = 'Wiedergabe gestoppt.'; });
+speechEnabled.addEventListener('change', () => { if (!speechEnabled.checked) { dialogueMetrics = undefined; stopSpeech(); } });
 volume.addEventListener('input', () => audioPlayer.setVolume(Number(volume.value)));
 void fetch('/api/tts/status').then(async response => {
   if (!response.ok) throw new Error('TTS status unavailable');
@@ -95,13 +118,20 @@ const capture = new PushToTalk({
     if (active) { setState('listening'); sttStatus!.textContent = 'Aufnahme läuft.'; }
   },
   onTranscribing: blob => { void transcribe(blob, captureGeneration); },
+  onStopRequested: () => {
+    if (diagnosticsEnabled && autoSend!.checked && speechEnabled!.checked && !speechEnabled!.disabled) {
+      dialogueMetrics = { captureEndedAt: performance.now(), values: {} };
+    }
+  },
   onError: () => {
+    dialogueMetrics = undefined;
     sttStatus!.textContent = 'Mikrofon nicht verfügbar oder Aufnahme fehlgeschlagen. Texteingabe bleibt möglich.';
     ptt!.disabled = !sttAvailable; pttCancel!.disabled = true;
     send!.disabled = false; setState('idle');
   },
 });
 function cancelCapture(): void {
+  dialogueMetrics = undefined;
   captureGeneration++;
   sttRequest?.abort(); sttRequest = undefined;
   capture.cancel();
@@ -110,22 +140,32 @@ function cancelCapture(): void {
 }
 async function transcribe(blob: Blob, generation: number): Promise<void> {
   if (generation !== captureGeneration || disposed) return;
+  const metrics = dialogueMetrics;
   setState('thinking'); ptt!.disabled = true;
   sttStatus!.textContent = 'Sprache wird erkannt …';
   const controller = new AbortController(); sttRequest = controller;
+  const requestStarted = performance.now();
+  if (metrics) addTiming(metrics, 'capture_to_upload_ms', metrics.captureEndedAt, requestStarted);
   const timeout = window.setTimeout(() => controller.abort(), 125000);
   try {
     const response = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': 'audio/webm;codecs=opus' }, body: blob, signal: controller.signal });
     if (!response.ok) throw new Error('STT unavailable');
+    const sttProviderMs = serverDuration(response, 'stt');
+    const uploadMs = serverDuration(response, 'upload');
     const result: unknown = await response.json();
+    if (generation !== captureGeneration || disposed) return;
+    addTiming(dialogueMetrics === metrics ? metrics : undefined, 'stt_request_ms', requestStarted, performance.now());
+    if (sttProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.stt_ms = sttProviderMs;
+    if (uploadMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.upload_ms = uploadMs;
     const text = (result as {text?: unknown} | null)?.text;
     if (typeof text !== 'string' || text.length > 1000) throw new Error('Invalid transcription');
-    if (generation !== captureGeneration || disposed) return;
+    if (!text.trim() || !autoSend!.checked || !speechEnabled!.checked || speechEnabled!.disabled) dialogueMetrics = undefined;
     input!.value = text;
     sttStatus!.textContent = text.trim() ? 'Erkannten Text prüfen oder senden.' : 'Keine Sprache erkannt.';
     setState('idle'); send!.disabled = false; pttCancel!.disabled = true; ptt!.disabled = !sttAvailable;
     if (text.trim() && autoSend!.checked) form!.requestSubmit();
   } catch {
+    if (generation === captureGeneration && dialogueMetrics === metrics) dialogueMetrics = undefined;
     if (generation === captureGeneration && !disposed) {
       sttStatus!.textContent = 'Spracherkennung fehlgeschlagen. Texteingabe bleibt möglich.';
       setState('idle'); send!.disabled = false; pttCancel!.disabled = true; ptt!.disabled = !sttAvailable;
@@ -138,6 +178,7 @@ async function transcribe(blob: Blob, generation: number): Promise<void> {
 ptt.addEventListener('click', () => {
   if (recording) { ptt.disabled = true; void capture.stop().catch(() => undefined); return; }
   if (send.disabled || !sttAvailable) return;
+  dialogueMetrics = undefined;
   stopSpeech();
   if (speechEnabled.checked && !speechEnabled.disabled) void audioPlayer.initialize().catch(() => undefined);
   captureGeneration++; send.disabled = true; ptt.disabled = true; pttCancel.disabled = false;
@@ -187,9 +228,21 @@ if (renderer) {
 }
 const clock = new THREE.Clock();
 let frame = 0;
+let fpsFrames = 0;
+let fpsWindowStarted = performance.now();
 function animate() {
   if (!renderer) return;
   frame = requestAnimationFrame(animate);
+  if (diagnosticsEnabled) {
+    fpsFrames++;
+    const now = performance.now();
+    const elapsed = now - fpsWindowStarted;
+    if (elapsed >= 1000) {
+      currentFps = fpsFrames * 1000 / elapsed;
+      fpsFrames = 0;
+      fpsWindowStarted = now;
+    }
+  }
   const delta = clock.getDelta();
   const mouth = audioPlayer.sampleLevel();
   host!.dataset.mouth = mouth.toFixed(3);
@@ -240,6 +293,7 @@ form.addEventListener('submit', async event => {
   stopSpeech();
   const generation = speechGeneration;
   const wantsSpeech = speechEnabled.checked && !speechEnabled.disabled;
+  const metrics = dialogueMetrics;
   const audioReady = wantsSpeech ? audioPlayer.initialize().then(() => true, () => false) : Promise.resolve(false);
   appendMessage('Du', message);
   input.value = '';
@@ -248,6 +302,7 @@ form.addEventListener('submit', async event => {
   setState('thinking');
   try {
     const controller = new AbortController();
+    const chatStarted = performance.now();
     const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 65000;
     const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
     let response: Response;
@@ -265,7 +320,10 @@ form.addEventListener('submit', async event => {
       if (response.status === 404) sessionId = undefined;
       throw new Error('API HTTP ' + response.status);
     }
+    const ollamaProviderMs = serverDuration(response, 'ollama');
     const result: unknown = await response.json();
+    addTiming(dialogueMetrics === metrics ? metrics : undefined, 'chat_request_ms', chatStarted, performance.now());
+    if (ollamaProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.ollama_ms = ollamaProviderMs;
     if (!result || typeof result !== 'object') throw new Error('Unexpected API response');
     const chatResult = result as { reply?: unknown; mode?: unknown; session_id?: unknown };
     if (typeof chatResult.reply !== 'string' || !chatResult.reply.trim()
@@ -284,10 +342,14 @@ form.addEventListener('submit', async event => {
       stopAudioButton.disabled = false;
       speechStatus.textContent = 'Sprachausgabe wird erzeugt …';
       const synthTimeout = window.setTimeout(() => synth.abort(), 65000);
+      const ttsStarted = performance.now();
       try {
         const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: chatResult.reply }), signal: synth.signal });
         if (!response.ok) throw new Error('TTS HTTP ' + response.status);
+        const piperProviderMs = serverDuration(response, 'piper');
         const wav = await response.arrayBuffer();
+        addTiming(dialogueMetrics === metrics ? metrics : undefined, 'tts_request_ms', ttsStarted, performance.now());
+        if (piperProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.piper_ms = piperProviderMs;
         if (generation !== speechGeneration) return;
         await audioPlayer.playWav(wav);
         if (generation !== speechGeneration) return;
@@ -301,6 +363,7 @@ form.addEventListener('submit', async event => {
       notice.textContent = 'Textantwort ohne Ton.';
     }
   } catch (error) {
+    if (dialogueMetrics === metrics) dialogueMetrics = undefined;
     if (generation === speechGeneration) {
       stopSpeech();
       setState('error');

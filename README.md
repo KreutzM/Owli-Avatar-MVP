@@ -104,7 +104,7 @@ Piper-Stimme.
 ### Optionale Spracheingabe
 
 Standard ist `OWLI_STT_MODE=off`. Fuer den optionalen STT-Modus werden
-`faster-whisper` und PyAV in der Python-Umgebung des API-Prozesses benoetigt,
+`faster-whisper` und PyAV in der Python-Umgebung des STT-Workers benoetigt (standardmaessig die API-Umgebung; eine vorhandene separate Umgebung kann mit absolutem STT_PYTHON-Pfad gewaehlt werden),
 sowie ein explizit vorhandenes CTranslate2-Modellverzeichnis `STT_MODEL_PATH`
 (absolut, mit `model.bin`, `config.json` und `tokenizer.json`). Erst nach
 gesonderter Genehmigung installieren bzw. ein Modell herunterladen; der
@@ -122,4 +122,4 @@ Der Nutzer hat den durchgaengigen Sprachtest in Phase 5 ueber SSH-Forwarding abg
 
 ### Betrieb und Windows-Zugriff
 
-Start, Stop, Voraussetzungen und der genehmigungspflichtige HTTPS-LAN-Vorschlag stehen in [docs/ki-server.md](docs/ki-server.md). Der bereits erprobte SSH-Localhost-Portforward bleibt der Zugang ohne direkte LAN-Freigabe. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.
+Start, Stop, opt-in Leistungsmessung, Voraussetzungen und der genehmigungspflichtige HTTPS-LAN-Vorschlag stehen in [docs/ki-server.md](docs/ki-server.md). Der bereits erprobte SSH-Localhost-Portforward bleibt der Zugang ohne direkte LAN-Freigabe. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.

@@ -137,3 +137,20 @@ def test_worker_decoding_and_inference_boundaries(monkeypatch, scenario, expecte
     except SystemExit as exc:
         assert exc.code == 0
     assert json.loads(output.getvalue()) == expected
+
+
+def test_explicit_worker_python_is_used_and_validated(tmp_path, monkeypatch):
+    import sys
+    with pytest.raises(ValueError):
+        FasterWhisperProvider(model_dir(tmp_path), python_executable="relative")
+    provider = FasterWhisperProvider(model_dir(tmp_path), python_executable=sys.executable)
+    seen = []
+    class Process:
+        returncode = 0
+        async def communicate(self, _): return b'{"text":"ok"}', b''
+    async def spawn(*args, **kwargs):
+        seen.append(args[0])
+        return Process()
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
+    assert asyncio.run(provider.transcribe(webm())) == "ok"
+    assert seen == [sys.executable]

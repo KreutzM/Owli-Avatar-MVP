@@ -27,7 +27,9 @@ case "${OWLI_STT_MODE:-off}" in off|faster-whisper) ;; *) fail 'OWLI_STT_MODE mu
 if [[ "${OWLI_STT_MODE:-off}" == faster-whisper ]]; then
   model="${STT_MODEL_PATH:-}"
   [[ -n "$model" && "$model" == /* && -d "$model" ]] || fail 'STT_MODEL_PATH must be an existing absolute model directory'
-  apps/api/.venv/bin/python -c "import av, faster_whisper" || fail 'STT requires PyAV and faster-whisper in the API environment'
+  stt_python="${STT_PYTHON:-$PWD/apps/api/.venv/bin/python}"
+  [[ "$stt_python" == /* && -x "$stt_python" && -f "$stt_python" ]] || fail 'STT_PYTHON must be an absolute executable file'
+  "$stt_python" -c "import av, faster_whisper" || fail 'STT requires PyAV and faster-whisper in the worker environment'
   for file in config.json model.bin tokenizer.json; do
     [[ -f "$model/$file" && -r "$model/$file" ]] || fail "STT model is missing readable $file"
   done

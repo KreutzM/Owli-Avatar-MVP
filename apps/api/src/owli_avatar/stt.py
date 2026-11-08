@@ -78,16 +78,20 @@ def _validate_audio(data: bytes) -> None:
 
 
 class FasterWhisperProvider:
-    def __init__(self, model_dir: str, timeout: float = DEFAULT_TIMEOUT, runner=None):
+    def __init__(self, model_dir: str, timeout: float = DEFAULT_TIMEOUT, runner=None, python_executable: str | None = None):
         self.model_dir = _validate_model_dir(model_dir)
         if timeout <= 0:
             raise ValueError("timeout must be positive")
         self.timeout = timeout
+        executable = python_executable or sys.executable
+        if not os.path.isabs(executable) or not os.path.isfile(executable) or not os.access(executable, os.X_OK):
+            raise ValueError("STT Python must be an absolute executable file")
+        self.python_executable = executable
         self._runner = runner or self._run_worker
 
     async def _run_worker(self, audio: bytes) -> str:
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", _WORKER, self.model_dir,
+            self.python_executable, "-c", _WORKER, self.model_dir,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             env={**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"},

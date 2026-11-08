@@ -5,6 +5,8 @@
  */
 export interface PushToTalkOptions {
   onRecording?: (recording: boolean) => void;
+  /** Called immediately before MediaRecorder.stop(), including the duration limit. */
+  onStopRequested?: () => void;
   onTranscribing?: (audio: Blob) => void;
   onError?: (error: Error) => void;
 }
@@ -30,11 +32,13 @@ export class PushToTalk {
   private resolveStop: ((audio: Blob) => void) | null = null;
   private rejectStop: ((error: Error) => void) | null = null;
   private readonly onRecording?: (recording: boolean) => void;
+  private readonly onStopRequested?: () => void;
   private readonly onTranscribing?: (audio: Blob) => void;
   private readonly onError?: (error: Error) => void;
 
   constructor(options: PushToTalkOptions = {}) {
     this.onRecording = options.onRecording;
+    this.onStopRequested = options.onStopRequested;
     this.onTranscribing = options.onTranscribing;
     this.onError = options.onError;
     window.addEventListener("pagehide", this.handlePageHide);
@@ -107,6 +111,7 @@ export class PushToTalk {
     });
     this.clearTimer();
     try {
+      this.onStopRequested?.();
       recorder.stop();
     } catch (error) {
       this.fail(asError(error));
