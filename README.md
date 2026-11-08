@@ -122,4 +122,4 @@ Der Nutzer hat den durchgaengigen Sprachtest in Phase 5 ueber SSH-Forwarding abg
 
 ### Betrieb und Windows-Zugriff
 
-Start, Stop, opt-in Leistungsmessung, Voraussetzungen und der genehmigungspflichtige HTTPS-LAN-Vorschlag stehen in [docs/ki-server.md](docs/ki-server.md). Der bereits erprobte SSH-Localhost-Portforward bleibt der Zugang ohne direkte LAN-Freigabe. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.
+Start, Stop, opt-in Leistungsmessung, Voraussetzungen und der noch separat freizugebende HTTPS-LAN-Betrieb stehen in [docs/ki-server.md](docs/ki-server.md). Der HTTPS-Zugang ist fuer das konfigurierte Heimnetz ohne Passwort vorgesehen; er ist noch nicht dauerhaft eingerichtet. Der erprobte SSH-Localhost-Portforward bleibt als Fallback verfuegbar. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.

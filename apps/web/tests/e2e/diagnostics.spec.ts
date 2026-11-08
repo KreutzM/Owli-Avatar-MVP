@@ -28,9 +28,9 @@ test('opt-in posts numeric timing only after captured audio is scheduled for pla
   await page.route('**/api/stt/status', route => route.fulfill({json:{enabled:true}}));
   await page.route('**/api/health', route => route.fulfill({json:{status:'ok',mode:'mock'}}));
   await page.route('**/api/tts/status', route => route.fulfill({json:{enabled:true}}));
-  await page.route('**/api/stt', route => route.fulfill({json:{text:'Frage'}, headers:{'Server-Timing':'upload;dur=4.5, stt;dur=24.5'}}));
-  await page.route('**/api/chat', route => route.fulfill({json:{reply:'Antwort',session_id:'must-not-be-logged',mode:'ollama'}, headers:{'Server-Timing':'ollama;dur=35.5'}}));
-  await page.route('**/api/tts', route => route.fulfill({contentType:'audio/wav',body:wav, headers:{'Server-Timing':'piper;dur=12.5'}}));
+  await page.route('**/api/stt', route => { expect(route.request().headers()['x-owli-request']).toBe('1'); return route.fulfill({json:{text:'Frage'}, headers:{'Server-Timing':'upload;dur=4.5, stt;dur=24.5'}}); });
+  await page.route('**/api/chat', route => { expect(route.request().headers()['x-owli-request']).toBe('1'); return route.fulfill({json:{reply:'Antwort',session_id:'must-not-be-logged',mode:'ollama'}, headers:{'Server-Timing':'ollama;dur=35.5'}}); });
+  await page.route('**/api/tts', route => { expect(route.request().headers()['x-owli-request']).toBe('1'); return route.fulfill({contentType:'audio/wav',body:wav, headers:{'Server-Timing':'piper;dur=12.5'}}); });
   await page.route('**/api/diagnostics', async route => { diagnostics = route.request().postDataJSON() as Record<string, unknown>; await route.fulfill({status:204,body:''}); });
   await page.goto('/');
   await page.check('#speech-enabled');

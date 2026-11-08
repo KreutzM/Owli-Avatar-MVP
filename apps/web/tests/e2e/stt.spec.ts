@@ -76,14 +76,60 @@ test('STT error returns to text input', async ({page}) => {
   await expect(page.locator('#send')).toBeEnabled();
 });
 
-test('cancel during transcription keeps the form usable and ignores late results', async ({page}) => {
+test('cancel during transcription aborts the request and keeps the form usable', async ({page}) => {
+  let releaseResponse!: () => void;
+  let received = false;
+  let requestFailed = false;
+  page.on('requestfailed', request => { if (request.url().endsWith('/api/stt')) requestFailed = true; });
+  let settleResponse!: () => void;
+  const responseGate = new Promise<void>(resolve => { releaseResponse = resolve; });
+  const responseSettled = new Promise<void>(resolve => { settleResponse = resolve; });
   await page.route('**/api/stt', async route => {
-    await new Promise(resolve => setTimeout(resolve, 900));
+    received = true;
+    await responseGate;
     await route.fulfill({json:{text:'Zu spät'}}).catch(() => undefined);
+    settleResponse();
   });
-  await configure(page); await page.click('#ptt'); await page.click('#ptt');
-  await expect(page.locator('#stt-status')).toContainText('erkannt');
-  await page.click('#ptt-cancel'); await page.waitForTimeout(1000);
+  try {
+    await configure(page); await page.click('#ptt'); await page.click('#ptt');
+    await expect.poll(() => received).toBe(true);
+    await expect(page.locator('#ptt-cancel')).toBeEnabled();
+    await page.click('#ptt-cancel');
+    await expect.poll(() => requestFailed).toBe(true);
+    releaseResponse();
+    await responseSettled;
+    await expect(page.locator('#message')).toHaveValue('');
+    await expect(page.locator('#state')).toContainText('idle');
+    await expect(page.locator('#send')).toBeEnabled();
+  } finally {
+    releaseResponse();
+  }
+});
+
+
+test('ignores a late STT result even if the transport ignores abort', async ({page}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    (window as any).__lateSttStarted = false;
+    (window as any).__lateSttRead = false;
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (input !== '/api/stt') return originalFetch(input, init);
+      (window as any).__lateSttStarted = true;
+      return new Promise<Response>(resolve => {
+        (window as any).__releaseLateStt = () => resolve({
+          ok: true,
+          headers: new Headers(),
+          json: async () => { (window as any).__lateSttRead = true; return {text: 'Zu spät'}; },
+        } as Response);
+      });
+    }) as typeof fetch;
+  });
+  await configure(page);
+  await page.click('#ptt'); await page.click('#ptt');
+  await expect.poll(() => page.evaluate(() => (window as any).__lateSttStarted)).toBe(true);
+  await page.click('#ptt-cancel');
+  await page.evaluate(() => (window as any).__releaseLateStt());
+  await expect.poll(() => page.evaluate(() => (window as any).__lateSttRead)).toBe(true);
   await expect(page.locator('#message')).toHaveValue('');
   await expect(page.locator('#state')).toContainText('idle');
   await expect(page.locator('#send')).toBeEnabled();

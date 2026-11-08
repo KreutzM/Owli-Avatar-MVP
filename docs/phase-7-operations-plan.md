@@ -1,6 +1,7 @@
 # Phase 7: Vorschlag fuer dauerhaften Heimnetzbetrieb
 
-Status: Architekturvorschlag zu Issue #19. Kein Dienst ist eingerichtet,
+Status: Nutzer hat einen passwortfreien, einfachen Heimnetzzugang als
+Architekturrichtung freigegeben. Kein Dienst ist eingerichtet,
 aktiviert oder bereitgestellt. Angaben zu internen Adressen, privaten Dateien,
 Passwoertern und Zertifikats-Fingerabdruecken gehoeren nicht ins oeffentliche
 Repository. Bestehende Testzertifikate und das Windows-Vertrauen bleiben
@@ -104,7 +105,15 @@ dauerhaften, privaten Ort uebernommen bzw. reproduzierbar erstellt werden.
 Die vorhandene Python-venv darf nicht unbesehen als portabel vorausgesetzt
 werden: Kopier-/Offline-Rebuild-Verfahren, Abhaengigkeiten, native Bibliotheken,
 Importe und Modellhashes werden vor einem Dienststart geprueft. Ein lokales
-Wheelhouse ist bislang nicht nachgewiesen. Keine Modell-/Stimm-Downloads,
+Wheelhouse ist bislang nicht nachgewiesen. Auf dem untersuchten Rechner
+wurden aus vorhandenen Paketen neue isolierte temporaere Python-Umgebungen
+fuer STT und Piper erstellt: eine STT-Probe mit vorhandenem Modell und das
+Laden der vorhandenen Piper-Teststimme waren offline erfolgreich. Auch eine
+aus vorhandenem Interpreter und Paketen neu erstellte API-Umgebung bestand
+Importpruefungen. Diese Proben belegen weder einen anderen Rechner noch die
+endgueltigen Rechte des Dienstkontos; die API-venv muss nach dem Kopieren des
+Interpreters am endgueltigen Zielort neu erstellt werden, da ihre Pfade
+absolut sind. Keine Modell-/Stimm-Downloads,
 keine private Stimme oder Modellgewichte ins Git. Reicht der vorhandene
 Offline-Bestand nicht aus, wird die Aktivierung gestoppt und die Luecke
 gemeldet. Die Thorsten-Teststimme bleibt auf lokale nichtkommerzielle Tests
@@ -134,6 +143,12 @@ eigene Start abgebrochen. Ollama bleibt eine externe Abhaengigkeit; weder Start,
 Stop noch Konfiguration des Ollama-Dienstes sind Teil des Owli-Betriebs.
 Ausfall fuehrt zu nachvollziehbaren Fehlern und manuellem oder begrenztem
 Retry, nicht zu unbegrenzten Neustartschleifen.
+
+Die Serverinfrastruktur und ihre Dokumentation gehoeren in das private
+KI-Server-Repository. Dessen Vorgehen verlangt kleine, nachvollziehbare,
+idempotente Ansible-Schritte, explizite Freigabe und kein automatisches
+Deployment. Das Owli-Repository darf dieses Repository nicht ohne gesonderte
+Freigabe veraendern. Uncommittete fremde Aenderungen dort bleiben erhalten.
 
 Die geplanten Host-Aenderungen muessen nach fertig vorbereitetem und
 reviewtem Stand einzeln freigegeben werden:

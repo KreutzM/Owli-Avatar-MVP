@@ -39,3 +39,13 @@
 
 
 Phase 6: Drei lokale Sprachdialoge ueber den abgenommenen SSH-Tunnel wurden instrumentiert; Messgrenzen und Werte stehen in docs/ki-server.md. Der zeitlich begrenzte direkte HTTPS-LAN-Test wurde serverseitig und fuer Windows-Zugang und Mikrofon durch den Nutzer bestaetigt; die Browservariable `window.isSecureContext` wurde mit `true` bestaetigt; dauerhafter Betrieb bleibt separat offen.
+
+## Phase 7 — Dauerbetrieb im Heimnetz
+
+- Passwortfreier HTTPS-Zugang fuer alle Geraete im erlaubten Heimnetz; interne
+  Provider bleiben auf Loopback. Vorhandene Test-CA und Windows-Vertrauen erhalten.
+- Eigene Dienste und private Modell-/Zertifikatspfade nach den Regeln des
+  KI-Server-Repositories vorbereiten; Hosteingriffe und Deployment nur nach
+  gesonderter Freigabe.
+- Lokale Tests und unabhaengiger Review sind von der spaeteren persoenlichen
+  Windows-Abnahme und Neustartpruefung zu trennen. Phase 7 bleibt bis dahin offen.
