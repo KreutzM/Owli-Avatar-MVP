@@ -18,8 +18,11 @@ erhalten.
 - Node und OpenSSL sind vorhanden. Der getestete HTTPS-Proxy liefert einen
   Web-Build und leitet /api an Loopback weiter, hat aber keinen Login.
   Fuer Dauerbetrieb darf dieser ungeschuetzte Testmodus nicht verwendet werden.
-- Ollama ist aktiv und das gewaehlte Modell vorhanden. Es gibt keine
-  eingerichteten Owli-/Piper-User-Units. User-Lingering ist bereits aktiv.
+- Ollama ist aktiv und das gewaehlte Modell vorhanden. Die vorgeschlagenen
+  Owli-Unit- und Dienstkonto-Namen waren bei der lesenden Pruefung frei.
+  Das vorhandene Benutzerkonto ist Mitglied der sudo-Gruppe; User-Units
+  desselben Kontos waeren deshalb keine ausreichende Privilegtrennung.
+  User-Lingering ist bereits aktiv und muss nicht geaendert werden.
   UFW war inaktiv und die lesbaren nftables-Regeln waren leer. Der Router
   wurde nicht geprueft; daraus folgt keine Aussage ueber Internetfreigaben.
 - Das Windows-Vertrauen wurde vom Nutzer als zu bewahren bezeichnet; es wurde
@@ -69,8 +72,9 @@ Die bereits benutzte CA, ihr privater Schluessel, das Serverzertifikat,
 dessen privater Schluessel und das Windows-Vertrauen werden weder geloescht
 noch ueberschrieben. Vorgeschlagene Uebernahme nach ausdruecklicher
 Host-Freigabe: ein neues privates Verzeichnis unter
-`~/.local/share/owli/` mit Modus 0700 anlegen; vorhandenes Serverzertifikat
-und seinen Schluessel in einen eigenen TLS-Unterordner mit 0600 kopieren,
+`/var/lib/owli/` mit Modus 0700 fuer das eigene Dienstkonto anlegen;
+vorhandenes Serverzertifikat und seinen Schluessel in einen eigenen
+TLS-Unterordner mit 0600 kopieren,
 Datei- und Zertifikats-Fingerabdruecke sowie Zuordnung von Schluessel und
 Zertifikat vor und nach dem Kopieren pruefen. Die bisherige Kopie bleibt
 unveraendert. Vor Aktivierung werden Ablaufzeit und IP-SAN mit der tatsaechlichen
@@ -105,30 +109,42 @@ beschraenkt.
 
 ## Prozessbetrieb und Eingriffe
 
-Vorschlag: drei eigene systemd-User-Units `owli-piper.service`,
-`owli-api.service` und `owli-https.service`, unter dem bestehenden
-unprivilegierten Benutzer. Es werden keine fremden Dienstdateien oder
-Ollama-/Hermes-Units veraendert. Die Units nutzen explizite absolute Pfade,
-private Konfiguration, begrenzte Neustartversuche und kurze Health- bzw.
-Bereitschaftspruefungen. Reihenfolge allein beweist keine Bereitschaft:
-API und Eingang pruefen ihre jeweiligen Voraussetzungen mit zeitlicher Grenze.
-Bei belegten Ports, fehlenden Dateien, ungueltiger Auth oder Zertifikaten
-wird der eigene Start abgebrochen. Ollama bleibt eine externe Abhaengigkeit;
-weder Start, Restart, Stop noch Konfiguration des Ollama-Dienstes sind Teil
-des Owli-Betriebs. Ausfall fuehrt zu nachvollziehbaren Fehlern und manuellem
-oder begrenztem Retry, nicht zu unbegrenzten Neustartschleifen.
+Vorschlag: drei eigene systemd-System-Units `owli-piper.service`,
+`owli-api.service` und `owli-https.service` mit einem eigens angelegten
+Dienstkonto `owli-avatar` ohne interaktiven Login und ohne sudo- oder
+Ollama-Gruppenmitgliedschaft. Die Wahl eines Systemdienstes erfordert
+bewusst eine gesonderte Host-Freigabe. Es werden keine fremden Dienstdateien
+oder Ollama-/Hermes-Units veraendert. Die Units nutzen explizite absolute
+Pfade, private Konfiguration, begrenzte Neustartversuche und kurze Health-
+bzw. Bereitschaftspruefungen. Das Dienstkonto liest nur die fuer den Betrieb
+noetigen, dafuer bereitgestellten Kopien; es benoetigt keinen Zugriff auf
+den CA-Privatschluessel. Die Dienste erhalten `NoNewPrivileges`, wo
+funktionsfaehig Dateisystem- und Temporaerverzeichnis-Isolation, und nur
+erforderliche Schreibrechte. Sandboxing und dessen Kernel-/systemd-Support
+muessen vor Aktivierung nachgewiesen werden; gleiche UID oder eine
+ungetestete Sandbox sind keine Isolation.
+
+Reihenfolge allein beweist keine Bereitschaft: API und Eingang pruefen ihre
+jeweiligen Voraussetzungen mit zeitlicher Grenze. Bei belegten Ports,
+fehlenden Dateien, ungueltiger Auth oder Zertifikaten wird der eigene Start
+abgebrochen. Ollama bleibt eine externe Abhaengigkeit; weder Start, Restart,
+Stop noch Konfiguration des Ollama-Dienstes sind Teil des Owli-Betriebs.
+Ausfall fuehrt zu nachvollziehbaren Fehlern und manuellem oder begrenztem
+Retry, nicht zu unbegrenzten Neustartschleifen.
 
 Die geplanten Host-Aenderungen muessen nach fertig vorbereitetem und
 reviewtem Stand einzeln freigegeben werden:
 
-1. Ausschliesslich eigene private Konfiguration, kopierte vorhandene
-   Zertifikate, geprüfte STT-Umgebung und Build unter dem Nutzerkonto
-   anlegen. Vorhandene Dateien, /tmp-Originale und Backups bleiben erhalten.
+1. Ein dediziertes Dienstkonto ohne Login und ohne administrative Gruppen
+   und ausschliesslich eigene private Konfiguration, kopierte vorhandene
+   Zertifikate, gepruefte STT-Umgebung und Build unter `/var/lib/owli/`
+   anlegen. Rechte fuer das Dienstkonto pruefen; bestehende Dateien,
+   /tmp-Originale und Backups bleiben erhalten.
 2. Ausschliesslich die drei neuen Unit-Dateien unter
-   `~/.config/systemd/user/` installieren, `systemctl --user daemon-reload`
-   und nach gesonderter Deployment-Freigabe gezielt diese Units aktivieren
-   und starten. Bestehendes Lingering bleibt unveraendert. Ein eventuell
-   vorhandener Namenskonflikt stoppt die Aktion.
+   `/etc/systemd/system/` installieren, `systemctl daemon-reload` und
+   nach gesonderter Deployment-Freigabe gezielt diese Units aktivieren und
+   starten. Bestehendes User-Lingering bleibt unveraendert. Ein eventuell
+   vorhandener Konto- oder Namenskonflikt stoppt die Aktion.
 3. Keine Firewall-, Router-, DNS-, SSH-, Windows-Trust- oder globalen
    systemd-Aenderungen als Teil dieser Schritte. Eine eventuell dennoch
    erforderliche Aenderung wird vorab gesondert vorgelegt.
@@ -141,11 +157,12 @@ Update. Alte Releases/Artefakte bleiben bis zur gesonderten Entscheidung
 erhalten.
 
 Rueckbau nach einer genehmigten Installation: nur die drei oben genannten
-eigenen Units mit `systemctl --user disable --now` gezielt stoppen und
+eigenen Units mit `systemctl disable --now` gezielt stoppen und
 deaktivieren, nur ihre eigenen Unit-Dateien nach Pruefung entfernen und
-`systemctl --user daemon-reload` ausfuehren. Keine anderen Dienste,
-Lingering, Netzregeln, Zertifikate, Windows-Vertrauen, Modellkopien oder
-Backups veraendern. Rollback eines Updates erfolgt durch dokumentierten
+`systemctl daemon-reload` ausfuehren. Das Dienstkonto und private
+Dateien bleiben bis zur separaten Entscheidung erhalten. Keine anderen
+Dienste, Lingering, Netzregeln, Zertifikate, Windows-Vertrauen, Modellkopien
+oder Backups veraendern. Rollback eines Updates erfolgt durch dokumentierten
 Wechsel auf den vorher gesicherten Projektstand nach erneuter Freigabe.
 SSH-Localhost-Forwarding bleibt der Fallback.
 
