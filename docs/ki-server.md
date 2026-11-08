@@ -33,8 +33,24 @@ und installiert oder laedt keine Modelle. Fuer einen Mock-Start:
 OWLI_MODE=mock OWLI_TTS_MODE=off OWLI_STT_MODE=off bash scripts/run-dev.sh
 ```
 
-Fuer den Live-Betrieb vorhandenes Ollama und einen separat gestarteten
-Piper-HTTP-Provider voraussetzen. In derselben Shell explizit konfigurieren:
+Fuer den Live-Betrieb ein vorhandenes Ollama-Modell und eine bereits
+eingerichtete Piper-Umgebung mit lokalem ONNX-Stimmmodell und zugehoeriger
+JSON-Datei voraussetzen. Die beim Test verwendete Thorsten-Stimme ist nur
+fuer lokale nichtkommerzielle Tests freigegeben; ihre Weitergaberechte sind
+nicht abschliessend geklaert. Zuerst in einem eigenen Terminal Piper auf
+Loopback starten (Platzhalter durch vorhandene absolute private Pfade
+ersetzen):
+```sh
+PIPER_PYTHON='<absoluter Pfad zum vorhandenen Piper-Python>'
+PIPER_VOICE='<absoluter Pfad zur vorhandenen .onnx-Datei>'
+"$PIPER_PYTHON" -m piper.http_server --host 127.0.0.1 --port 5000 --model "$PIPER_VOICE"
+```
+Der eigene Prozess wird in diesem Terminal mit Ctrl-C beendet; kein Debug-Modus
+aktivieren. Ein bereits laufender Dienst wird weder ersetzt noch beendet.
+Vorhandene Piper-Version und Modell muessen den HTTP-Endpunkt `/synthesize`
+bereitstellen; es wird kein Modell heruntergeladen.
+
+In einem zweiten Terminal Owli explizit konfigurieren:
 
 ```sh
 export OWLI_MODE=ollama OLLAMA_MODEL='<vorhandenes Modell>' OLLAMA_THINK=false
@@ -80,14 +96,19 @@ SSH-Einstellungen und Zugangsdaten stammen aus der bestehenden privaten
 Host-Dokumentation. Browser-Mikrofonzugriff braucht eine Nutzerfreigabe und
 einen sicheren Kontext; localhost erfuellt diese Bedingung.
 
-Ein direkter Zugang ist nicht eingerichtet oder auf Windows getestet. Fuer
-einen separat freizugebenden, zeitlich begrenzten Test dient
+Am 8. November 2026 wurde ein zeitlich begrenzter direkter HTTPS-Test
+durchgefuehrt: Zertifikatspruefung sowie HTML, API und Modell wurden auf dem
+Server geprueft; der Nutzer bestaetigte den HTTPS-Aufruf und die
+Mikrofonfreigabe auf Windows und meldete fuer
+`window.isSecureContext` den Wert `true`. Der Test-Listener
+wurde danach beendet; ein dauerhafter Dienst wurde nicht eingerichtet.
+Fuer einen erneut separat freizugebenden Test dient
 `scripts/lan-https-proxy.mjs` als projektlokaler Node-HTTPS-Server: Er liefert
 einen eigenen Web-Build aus und leitet `/api` ausschliesslich an FastAPI auf
 Loopback weiter. Node und OpenSSL sind auf dem untersuchten Ubuntu-Host
 vorhanden; ein etablierter Reverse-Proxy ist dort nicht vorhanden. Ein
 isolierter Loopback-Test pruefte TLS, die Weiterleitung und Dateigrenzen;
-dies belegt keinen LAN- oder Windows-Test.
+der reale Test ist davon als gesonderter Nachweis zu unterscheiden.
 
 Geplant ist ein unprivilegierter Port 8443 auf genau der zuvor lokal
 geprueften privaten LAN-IPv4-Adresse, nicht auf einer Wildcard-Adresse.

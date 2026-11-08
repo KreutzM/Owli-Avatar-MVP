@@ -38,4 +38,4 @@
 **Arbeitsmodus:** Eine klar abgegrenzte Phase/PR zuerst. Phasen nicht als implementiert markieren, bevor Check und Live-Beleg vorliegen.
 
 
-Phase 6: Drei lokale Sprachdialoge ueber den abgenommenen SSH-Tunnel wurden instrumentiert; Messgrenzen und Werte stehen in docs/ki-server.md. Der direkte HTTPS-LAN-Zugang und dessen Windows-Abnahme bleiben bis zum tatsaechlichen Test offen.
+Phase 6: Drei lokale Sprachdialoge ueber den abgenommenen SSH-Tunnel wurden instrumentiert; Messgrenzen und Werte stehen in docs/ki-server.md. Der zeitlich begrenzte direkte HTTPS-LAN-Test wurde serverseitig und fuer Windows-Zugang und Mikrofon durch den Nutzer bestaetigt; die Browservariable `window.isSecureContext` wurde mit `true` bestaetigt; dauerhafter Betrieb bleibt separat offen.
