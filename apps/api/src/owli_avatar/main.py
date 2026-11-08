@@ -132,7 +132,7 @@ def provider() -> OllamaProvider:
         total = float(os.getenv("OLLAMA_TOTAL_TIMEOUT", "60"))
         if not (0 < connect <= 30 and 0 < total <= 300):
             raise ValueError
-        return OllamaProvider(os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"), os.getenv("OLLAMA_MODEL", ""), connect, total)
+        return OllamaProvider(os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"), os.getenv("OLLAMA_MODEL", ""), connect, total, think=os.getenv("OLLAMA_THINK", "auto"))
     except ValueError as exc:
         raise ProviderError("CONFIG_ERROR", 503, "Chat is not configured correctly") from exc
 

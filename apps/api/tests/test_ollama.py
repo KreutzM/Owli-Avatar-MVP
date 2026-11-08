@@ -24,6 +24,38 @@ def test_payload_and_reply():
     assert run(provider.generate([{"role": "user", "content": "Hallo"}])) == "Antwort"
 
 
+@pytest.mark.parametrize("setting,expected", [("auto", None), ("true", True), ("false", False)])
+@pytest.mark.parametrize("model", ["gemma4:e2b", "another-model"])
+def test_think_configuration_controls_ollama_request(monkeypatch, setting, expected, model):
+    from owli_avatar.main import provider
+    monkeypatch.setenv("OLLAMA_MODEL", model)
+    monkeypatch.setenv("OLLAMA_THINK", setting)
+    def handler(request):
+        payload = json.loads(request.content)
+        assert payload["model"] == model
+        if expected is None:
+            assert "think" not in payload
+        else:
+            assert payload["think"] is expected
+        return httpx.Response(200, json={"message": {"content": "OK"}})
+    instance = provider()
+    instance.transport = httpx.MockTransport(handler)
+    assert run(instance.generate([{"role": "user", "content": "Hallo"}])) == "OK"
+
+
+@pytest.mark.parametrize("setting", ["", "yes", "False", "0", " false "])
+def test_invalid_think_setting_fails_safely_and_mock_remains_available(monkeypatch, setting):
+    monkeypatch.setenv("OLLAMA_MODEL", "local")
+    monkeypatch.setenv("OLLAMA_THINK", setting)
+    monkeypatch.setenv("OWLI_MODE", "ollama")
+    with TestClient(app) as client:
+        response = client.post("/api/chat", json={"message": "Hallo"})
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "CONFIG_ERROR"
+        monkeypatch.setenv("OWLI_MODE", "mock")
+        assert client.post("/api/chat", json={"message": "Hallo"}).status_code == 200
+
+
 @pytest.mark.parametrize("response,code", [
     (httpx.Response(404), "MODEL_NOT_FOUND"),
     (httpx.Response(400), "PROVIDER_ERROR"),

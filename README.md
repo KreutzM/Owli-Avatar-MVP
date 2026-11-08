@@ -69,6 +69,14 @@ zulaessig. `OLLAMA_CONNECT_TIMEOUT` und `OLLAMA_TOTAL_TIMEOUT` konfigurieren
 die Timeouts in Sekunden (Standard 3 bzw. 60). Der Browser wartet standardmaessig
 65 Sekunden; `VITE_CHAT_TIMEOUT_MS` kann beim Webstart gesetzt werden.
 
+`OLLAMA_THINK=auto` (Standard) ueberlaesst den Denkmodus dem Modell und sendet
+keinen `think`-Parameter. `OLLAMA_THINK=true` bzw. `false` sendet den
+entsprechenden Booleschen Wert; ungueltige Werte fuehren zu einem
+Konfigurationsfehler. Die Unterstuetzung haengt vom jeweiligen Modell ab.
+Fuer den lokalen Sprachtest wurden `OWLI_MODE=ollama`,
+`OLLAMA_MODEL=gemma4:e2b` und `OLLAMA_THINK=false` verwendet; dies sind
+Beispiele, keine neuen Defaults.
+
 Sessions liegen begrenzt im Speicher eines einzelnen Backend-Prozesses und
 gehen bei Neustart verloren. Die Bewegung beim Antworten bleibt eine
 synthetische Simulation ohne Ton oder Viseme. Live-Ollama ist separat von

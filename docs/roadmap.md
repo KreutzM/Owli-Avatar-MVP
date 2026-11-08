@@ -1,6 +1,6 @@
 # Roadmap / Abnahmekriterien
 
-**Projektstatus 2026-10-31:** Mock-API und lokal bereitgestelltes Vuena-Originalmodell mit Idle, Blinzeln und synthetischer Jaw-Steuerung. Ollama-Textprovider optional; Live-Nachweis separat. Piper-TTS optional implementiert, Live-Stimme separat zu pruefen; optionale STT-Anbindung implementiert; Live-Mikrofonabnahme offen. CI-Pruefung und eigener Realbrowser-Test sind getrennte Nachweise.
+**Projektstatus:** Der Nutzer hat Phase 5 mit lokaler STT, Ollama, Piper und Vuena im Windows-Browser abgenommen; sicherer Zugriff ueber SSH-Localhost-Portforwarding. Die vorhandene, sehr subtile Jaw-Bewegung ist akzeptiert. Ein frueherer einzelner TTS-Fehler bleibt ohne gesicherte Ursache dokumentiert; die Rechte an der lokalen Thorsten-Teststimme sind nicht abschliessend geklaert. CI-Pruefung und Realbrowser-Abnahme bleiben getrennte Nachweise.
 
 ## Phase 1 — Mock End-to-End Grundgeruest
 - Vite/TypeScript/Three.js, Python FastAPI, testbare Provider-Vertraege und deterministische Mocks anlegen.
@@ -28,6 +28,7 @@
 - Push-to-talk, Audioformat/-groessenlimits, faster-whisper CPU-Provider mit datensparsamem Ablauf.
 - Sicherheitskontext (localhost oder HTTPS) testen und Mikrofonfehler sauber behandeln.
 - Abnahme: sprachliche Frage -> erkannter Text -> LLM -> TTS -> Avatar bei realem Browser-Test.
+- Nutzerabnahme: Mikrofon, editierbares Transkript, Direktversand, Stop/Abbruch, hoerbare Antwort und Idle-Rueckkehr persoenlich bestaetigt. Die geschaetzten drei Sekunden bis zur Antwort sind eine subjektive Beobachtung, keine praezise Messung bis zum ersten Ton. Die technische Jaw-Rotation wurde gemessen; ihre subtile optische Auspraegung am Originalmodell ist akzeptiert.
 
 ## Phase 6 — Integration und Leistungsbewertung
 - Reproduzierbarer Serverstart erst nach expliziter Freigabe; keine Systemdienste still aendern.
