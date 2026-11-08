@@ -1,11 +1,11 @@
 # Owli Avatar MVP
 
-Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog und optionale Piper-Sprachausgabe und optionales lokales STT; Live-Mikrofonabnahme offen.**
+Browserbasierter, lokal betreibbarer 3D-Eulenavatar mit Text-/Spracheingabe, LLM-Antwort und synchronisierter TTS-Schnabelbewegung. **Status: Mock-Chat mit lokal bereitgestelltem Vuena-Originalmodell und synthetischer Jaw-Bewegung; optionaler lokaler Ollama-Textdialog und optionale Piper-Sprachausgabe und optionales lokales STT; Phase 5 mit lokalem STT, Ollama, Piper und Windows-Mikrofon ueber SSH-Localhost-Forwarding vom Nutzer funktional abgenommen.**
 
 ## Ziel und Grenzen
 
 - Webbrowser rendert den austauschbaren, geriggten Charakter (Three.js, TypeScript, Vite).
-- Ein kleines Python/FastAPI-Backend orchestriert LLM (bestehendes Ollama), TTS (zunaechst Piper) und spaeter STT (faster-whisper).
+- Ein kleines Python/FastAPI-Backend orchestriert LLM (bestehendes Ollama), TTS (zunaechst Piper) und STT (faster-whisper).
 - Blender headless validiert und bearbeitet Modelle **offline**, nicht im Request-Pfad.
 - Vor jeder echten KI-Integration existiert ein deterministischer Mock fuer UI- und API-Tests.
 - Keine Unreal Engine, keine Pflicht fuer Docker, keine neue Datenbank, keine automatische Serverbereitstellung.
@@ -43,7 +43,7 @@ Die Projektkonfiguration ist in `.codex/config.toml` und den Rollen unter `.code
 
 ## Lizenzen / Datenschutz
 
-Die Lizenz fuer **eigenen Projektcode ist noch zu entscheiden**. Externe Modelle, Stimmen und Gewichte duerfen erst nach nachweisbarer Lizenz- und Herkunftspruefung eingecheckt oder verteilt werden. Keine .env-Dateien, Tokens, personenbezogenen Testmitschnitte oder internen Serveradressen ins oeffentliche Git. Lokale LLM-/Audio-Nutzung ist Ziel, nicht bereits implementierter Ist-Zustand.
+Die Lizenz fuer **eigenen Projektcode ist noch zu entscheiden**. Externe Modelle, Stimmen und Gewichte duerfen erst nach nachweisbarer Lizenz- und Herkunftspruefung eingecheckt oder verteilt werden. Keine .env-Dateien, Tokens, personenbezogenen Testmitschnitte oder internen Serveradressen ins oeffentliche Git. Live-Provider sind optional und muessen separat eingerichtet werden; Mock-CI belegt keine Live-Integration.
 
 
 ### Lokales Vuena-Originalmodell
@@ -104,7 +104,7 @@ Piper-Stimme.
 ### Optionale Spracheingabe
 
 Standard ist `OWLI_STT_MODE=off`. Fuer den optionalen STT-Modus werden
-`faster-whisper` und PyAV in der Python-Umgebung des API-Prozesses benoetigt,
+`faster-whisper` und PyAV in der Python-Umgebung des STT-Workers benoetigt (standardmaessig die API-Umgebung; eine vorhandene separate Umgebung kann mit absolutem STT_PYTHON-Pfad gewaehlt werden),
 sowie ein explizit vorhandenes CTranslate2-Modellverzeichnis `STT_MODEL_PATH`
 (absolut, mit `model.bin`, `config.json` und `tokenizer.json`). Erst nach
 gesonderter Genehmigung installieren bzw. ein Modell herunterladen; der
@@ -117,5 +117,9 @@ wiederholte Laden kostet Zeit. Es wird kein Audio dauerhaft gespeichert.
 Mikrofonzugriff erfolgt erst beim Klick in einem sicheren Browserkontext
 (localhost oder HTTPS). Aufnahme beenden fuellt das editierbare Textfeld;
 direktes Senden ist eine separate, standardmaessig ausgeschaltete Option.
-Die echten Mikrofon-, Modell- und durchgaengigen Sprachtests sind separat
-zu pruefen. Textchat bleibt bei deaktiviertem STT verfuegbar.
+Der Nutzer hat den durchgaengigen Sprachtest in Phase 5 ueber SSH-Forwarding abgenommen; neue Umgebungen sind separat zu pruefen. Textchat bleibt bei deaktiviertem STT verfuegbar.
+
+
+### Betrieb und Windows-Zugriff
+
+Start, Stop, opt-in Leistungsmessung, Voraussetzungen und der genehmigungspflichtige HTTPS-LAN-Vorschlag stehen in [docs/ki-server.md](docs/ki-server.md). Der bereits erprobte SSH-Localhost-Portforward bleibt der Zugang ohne direkte LAN-Freigabe. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.
