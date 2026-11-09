@@ -143,6 +143,7 @@ function splitSpeechText(text: string, maxChars = 350): string[] {
 }
 
 async function playSpeechSequence(text: string, generation: number, metrics?: DialogueMetrics, startAt = 0, retainedChunks?: string[]): Promise<void> {
+  if (generation !== speechGeneration) return;
   const chunks = retainedChunks ?? splitSpeechText(text);
   retrySpeech = undefined;
   retrySpeechButton!.disabled = true;
@@ -213,6 +214,7 @@ retrySpeechButton.addEventListener('click', () => {
   void audioPlayer.initialize().then(
     () => playSpeechSequence('', retry.generation, retry.metrics, retry.nextIndex, retry.chunks),
     () => {
+      if (retry.generation !== speechGeneration) return;
       retrySpeech = retry;
       retrySpeechButton.disabled = false;
       speechStatus.textContent = 'Audio-Wiedergabe nicht verfügbar; fehlgeschlagenen Abschnitt erneut versuchen.';
