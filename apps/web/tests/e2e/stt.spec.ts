@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './chat-stream-fixtures';
+import { fulfillChatStream } from './chat-stream-fixtures';
 
 async function configure(page: Page, mode: 'ok'|'denied'|'insecure'|'unsupported' = 'ok') {
   await page.addInitScript((selected) => {
@@ -44,7 +45,7 @@ test('record, stop, edit transcript and send via existing chat', async ({page}) 
 test('explicit auto send transcribes and sends once', async ({page}) => {
   let chats=0;
   await page.route('**/api/stt', route => route.fulfill({json:{text:'Automatische Frage'}}));
-  await page.route('**/api/chat', route => { chats++; return route.fulfill({json:{reply:'Antwort',session_id:'one',mode:'mock'}}); });
+  await page.route('**/api/chat/stream', route => { chats++; return fulfillChatStream(route, {reply:'Antwort',session_id:'one',mode:'mock'}); });
   await configure(page); await page.check('#voice-auto-send');
   await page.click('#ptt'); await page.click('#ptt');
   await expect(page.locator('#messages')).toContainText('Antwort'); expect(chats).toBe(1);

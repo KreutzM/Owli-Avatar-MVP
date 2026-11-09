@@ -387,11 +387,12 @@ window.addEventListener('pagehide', () => {
   renderer?.dispose();
 });
 
-function appendMessage(who: string, value: string) {
+function appendMessage(who: string, value: string): HTMLParagraphElement {
   const p = document.createElement('p');
   p.textContent = who + ': ' + value;
   messages!.append(p);
   messages!.scrollTop = messages!.scrollHeight;
+  return p;
 }
 
 const modeLabel = document.querySelector<HTMLParagraphElement>('#chat-mode');
@@ -431,40 +432,97 @@ form.addEventListener('submit', async event => {
   send.disabled = true;
   notice.textContent = '';
   setState('thinking');
+  let chatCompleted = false;
+  let incompleteReplyLine: HTMLParagraphElement | undefined;
   try {
     const controller = new AbortController();
-    const chatStarted = performance.now();
     const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 65000;
-    const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
     let response: Response;
+    let streamedReply = '';
+    let chatMode: 'mock' | 'ollama' | undefined;
+    let candidateSessionId: string | undefined;
+    let firstDeltaAt: number | undefined;
+    const chatStarted = performance.now();
+    const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
     try {
-      response = await fetch('/api/chat', {
+      response = await fetch('/api/chat/stream', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' },
+        headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1', 'Accept': 'application/x-ndjson' },
         body: JSON.stringify({ message, ...(sessionId ? { session_id: sessionId } : {}) }),
         signal: controller.signal,
       });
+      if (!response.ok) {
+        if (response.status === 404) sessionId = undefined;
+        throw new Error('API HTTP ' + response.status);
+      }
+      if (!response.headers.get('content-type')?.toLowerCase().includes('application/x-ndjson')) throw new Error('Unexpected stream response');
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Chat stream unavailable');
+      let acceptedStream = false;
+      try {
+      const decoder = new TextDecoder();
+      let pending = '';
+      let streamBytes = 0;
+      let finished = false;
+      const handleLine = (line: string) => {
+        if (!line) return;
+        if (finished) throw new Error('Chat stream event after completion');
+        if (line.length > 65536) throw new Error('Chat stream event too large');
+        const event: unknown = JSON.parse(line);
+        if (!event || typeof event !== 'object') throw new Error('Invalid chat stream event');
+        const item = event as { type?: unknown; text?: unknown; reply?: unknown; session_id?: unknown; mode?: unknown; error?: unknown };
+        if (item.type === 'start') {
+          if (candidateSessionId || typeof item.session_id !== 'string' || !item.session_id || item.session_id.length > 64
+            || (item.mode !== 'mock' && item.mode !== 'ollama')) throw new Error('Invalid chat stream start');
+          candidateSessionId = item.session_id;
+          chatMode = item.mode;
+          incompleteReplyLine = appendMessage(chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', '');
+        } else if (item.type === 'delta') {
+          if (!incompleteReplyLine || typeof item.text !== 'string' || !item.text || streamedReply.length + item.text.length > 4000) throw new Error('Invalid chat stream delta');
+          firstDeltaAt ??= performance.now();
+          streamedReply += item.text;
+          incompleteReplyLine.textContent = (chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)') + ': ' + streamedReply;
+          messages!.scrollTop = messages!.scrollHeight;
+        } else if (item.type === 'done') {
+          if (!candidateSessionId || typeof item.reply !== 'string' || item.reply !== streamedReply
+            || item.session_id !== candidateSessionId || item.mode !== chatMode || !streamedReply.trim()) throw new Error('Invalid chat stream completion');
+          finished = true;
+        } else if (item.type === 'error') {
+          throw new Error('Chat stream failed');
+        } else throw new Error('Unknown chat stream event');
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        streamBytes += value.byteLength;
+        if (streamBytes > 131072) throw new Error('Chat stream too large');
+        pending += decoder.decode(value, { stream: true });
+        let newline = pending.indexOf('\n');
+        while (newline !== -1) {
+          handleLine(pending.slice(0, newline));
+          pending = pending.slice(newline + 1);
+          newline = pending.indexOf('\n');
+        }
+        if (pending.length > 65536) throw new Error('Chat stream event too large');
+      }
+      pending += decoder.decode();
+      if (pending) handleLine(pending);
+      if (!finished || !candidateSessionId || !chatMode) throw new Error('Incomplete chat stream');
+      acceptedStream = true;
+      } finally {
+        if (!acceptedStream) {
+          controller.abort();
+          await reader.cancel().catch(() => undefined);
+        }
+      }
+      chatCompleted = true;
+      sessionId = candidateSessionId;
+      addTiming(dialogueMetrics === metrics ? metrics : undefined, 'chat_request_ms', chatStarted, performance.now());
+      if (firstDeltaAt !== undefined && dialogueMetrics === metrics && metrics) metrics.values.chat_first_token_ms = firstDeltaAt - chatStarted;
     } finally {
       window.clearTimeout(timeout);
     }
-    if (!response.ok) {
-      if (response.status === 404) sessionId = undefined;
-      throw new Error('API HTTP ' + response.status);
-    }
-    const ollamaProviderMs = serverDuration(response, 'ollama');
-    const result: unknown = await response.json();
-    addTiming(dialogueMetrics === metrics ? metrics : undefined, 'chat_request_ms', chatStarted, performance.now());
-    if (ollamaProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.ollama_ms = ollamaProviderMs;
-    if (!result || typeof result !== 'object') throw new Error('Unexpected API response');
-    const chatResult = result as { reply?: unknown; mode?: unknown; session_id?: unknown };
-    if (typeof chatResult.reply !== 'string' || !chatResult.reply.trim()
-      || (chatResult.mode !== 'mock' && chatResult.mode !== 'ollama')
-      || typeof chatResult.session_id !== 'string' || !chatResult.session_id.trim()
-      || chatResult.session_id.length > 64) {
-      throw new Error('Unexpected API response');
-    }
-    sessionId = chatResult.session_id;
-    appendMessage(chatResult.mode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', chatResult.reply);
+    const chatResult = { reply: streamedReply, mode: chatMode!, session_id: candidateSessionId! };
     if (wantsSpeech && generation === speechGeneration) {
       if (!(await audioReady)) throw new Error('Audio unavailable');
       if (generation !== speechGeneration) return;
@@ -473,11 +531,15 @@ form.addEventListener('submit', async event => {
       notice.textContent = 'Textantwort ohne Ton.';
     }
   } catch (error) {
+    if (!chatCompleted && incompleteReplyLine) {
+      incompleteReplyLine.textContent += ' (Antwort unvollständig, nicht gespeichert)';
+      incompleteReplyLine.dataset.status = 'incomplete';
+    }
     if (dialogueMetrics === metrics) dialogueMetrics = undefined;
     if (generation === speechGeneration) {
       stopSpeech();
       setState('error');
-      notice.textContent = wantsSpeech && messages!.lastElementChild?.textContent?.startsWith('Eule')
+      notice.textContent = chatCompleted && wantsSpeech
         ? 'Sprachausgabe nicht erreichbar oder fehlgeschlagen; Textantwort bleibt erhalten.'
         : 'Chat-API nicht erreichbar oder Antwort ungueltig. Backend lokal starten und erneut versuchen.';
       console.error(error);

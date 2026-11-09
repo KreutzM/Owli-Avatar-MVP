@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './chat-stream-fixtures';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
