@@ -2,10 +2,13 @@
 model = "gpt-6.1-terra"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
-approval_policy = "on-request"
+# Non-interactive issue execution inside the existing workspace sandbox.
+# Disallowed operations fail; this does not grant host or deployment access.
+approval_policy = "never"
 
 [sandbox_workspace_write]
-# Needed for vetted docs/dependency fetches; sandbox/approvals still apply.
+# Existing project network policy; only issue-scoped, vetted accesses are allowed.
+# This does not authorize installing packages or changing external services.
 network_access = true
 
 [agents]
