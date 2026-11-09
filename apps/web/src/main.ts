@@ -133,6 +133,7 @@ function takeSpeechChunks(buffer: string, flush = false, maxChars = 350): { chun
     let sentenceEnd = -1;
     for (let i = start; i < limit; i++) {
       if (!punct.includes(chars[i])) continue;
+      if (!/[\p{L}\p{N}]/u.test(chars.slice(start, i).join(''))) continue;
       let end = i + 1;
       while (end < chars.length && punct.includes(chars[end])) end++;
       while (end < chars.length && closers.includes(chars[end])) end++;
@@ -705,6 +706,7 @@ form.addEventListener('submit', async event => {
       speechSequenceActive = false;
       stopAudioButton!.disabled = true;
       if (progressiveFailed) {
+        setState('idle');
         retrySpeech = { chunks: progressiveChunks, nextIndex: progressivePlayed, generation, metrics };
         retrySpeechButton!.disabled = progressivePlayed >= progressiveChunks.length;
         speechStatus!.textContent = `Sprachausgabe teilweise fehlgeschlagen: ${progressivePlayed} von ${progressiveChunks.length} Abschnitten. Fehlgeschlagenen Abschnitt wiederholen möglich.`;
