@@ -131,9 +131,10 @@ test('a new chat stops replay before its own response can speak', async ({ page 
   await page.locator('#send').click();
   await expect(page.locator('#replay-audio')).toBeDisabled();
   await expect(page.locator('#state')).toContainText('thinking');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1100);
   await expect(page.locator('#state')).toContainText('thinking');
   releaseNewChat();
+  await expect.poll(() => ttsTexts.length).toBe(2);
   await expect(page.locator('#speech-status')).toContainText('Wiedergabe beendet.', { timeout: 5000 });
   expect(chats).toBe(2);
   expect(ttsTexts).toEqual(['Erste Antwort.', 'Zweite Antwort.']);
