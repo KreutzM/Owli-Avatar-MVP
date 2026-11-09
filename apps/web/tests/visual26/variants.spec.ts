@@ -9,7 +9,7 @@ test('Vuena baseline and two reversible visibility variants',async({page},info)=
   await page.evaluate(async()=>{const m=await import('/tests/visual26/render.ts');await m.mountVisual26();});
   await expect.poll(()=>page.evaluate(()=>Boolean(window.visual26))).toBe(true);
   await mkdir(out,{recursive:true});
-  const scenarios=[{name:'baseline',factor:1,view:'baseline'},{name:'camera-close-lower',factor:1,view:'close-low'},{name:'jaw-gain-1_25-close',factor:1.25,view:'close'}];
+  const scenarios=[{name:'baseline',factor:1,view:'baseline'},{name:'camera-oblique-framing',factor:1,view:'far-high-oblique'},{name:'theoretical-jaw-gain-3-oblique',factor:3,view:'far-high-oblique'}];
   for(const s of scenarios){
     await page.evaluate(({factor,view})=>window.visual26!.setPose(0,factor,view),s);await page.waitForTimeout(800);await page.screenshot({path:`${out}/${s.name}-closed.png`});
     await page.evaluate(({factor,view})=>window.visual26!.setPose(.5,factor,view),s);await page.waitForTimeout(1200);await page.screenshot({path:`${out}/${s.name}-speaking.png`});
