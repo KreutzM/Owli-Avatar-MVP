@@ -167,7 +167,6 @@ test('retry resumes only at the failed chunk and continues in order', async ({ p
     'Dritter Abschnitt ' + 'drei '.repeat(58) + '.',
   ];
   const reply = chunks.join(' ');
-  const ttsChunks = [chunks[0], ` ${chunks[1]}`, ` ${chunks[2]}`];
   const requested: string[] = [];
   await blockUnmockedApi(page);
   await page.route('**/api/chat/stream', route => fulfillChatStream(route, { reply, mode: 'mock', session_id: 'test-session' }));
@@ -186,9 +185,10 @@ test('retry resumes only at the failed chunk and continues in order', async ({ p
   await page.locator('#retry-speech').click();
   await expect(page.locator('#speech-status')).toContainText('Wiedergabe beendet.', { timeout: 10000 });
   expect(requested).toHaveLength(4);
-  expect(requested[0]).toBe(ttsChunks[0]);
-  expect(requested[1]).toBe(ttsChunks[1]);
+  expect(requested[0].trim()).toBe(chunks[0]);
+  expect(requested[1].trim()).toBe(chunks[1]);
   expect(requested[2]).toBe(requested[1]);
-  expect(requested[3]).toBe(ttsChunks[2]);
+  expect(requested[3].trim()).toBe(chunks[2]);
+  expect(requested[0] + requested[2] + requested[3]).toBe(reply);
   await expect(page.locator('#retry-speech')).toBeDisabled();
 });
