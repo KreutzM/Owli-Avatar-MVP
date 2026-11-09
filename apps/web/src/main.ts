@@ -30,13 +30,14 @@ const send = document.querySelector<HTMLButtonElement>('#send');
 const speechEnabled = document.querySelector<HTMLInputElement>('#speech-enabled');
 const stopAudioButton = document.querySelector<HTMLButtonElement>('#stop-audio');
 const retrySpeechButton = document.querySelector<HTMLButtonElement>('#retry-speech');
+const replayAudioButton = document.querySelector<HTMLButtonElement>('#replay-audio');
 const speechStatus = document.querySelector<HTMLParagraphElement>('#speech-status');
 const volume = document.querySelector<HTMLInputElement>('#volume');
 const ptt = document.querySelector<HTMLButtonElement>('#ptt');
 const pttCancel = document.querySelector<HTMLButtonElement>('#ptt-cancel');
 const sttStatus = document.querySelector<HTMLParagraphElement>('#stt-status');
 const autoSend = document.querySelector<HTMLInputElement>('#voice-auto-send');
-if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !retrySpeechButton || !speechStatus || !volume || !ptt || !pttCancel || !sttStatus || !autoSend) {
+if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !retrySpeechButton || !replayAudioButton || !speechStatus || !volume || !ptt || !pttCancel || !sttStatus || !autoSend) {
   throw new Error('Required UI elements missing');
 }
 
@@ -78,7 +79,23 @@ let activeChatRequest: AbortController | undefined;
 let wakeProgressiveQueue: (() => void) | undefined;
 let speechSequenceActive = false;
 let playbackFinished: (() => void) | undefined;
-let retrySpeech: { chunks: string[]; nextIndex: number; generation: number; metrics?: DialogueMetrics } | undefined;
+const MAX_REPLAY_AUDIO_BYTES = 20 * 1024 * 1024;
+let lastReplayAudio: ArrayBuffer[] = [];
+let retrySpeech: { chunks: string[]; nextIndex: number; generation: number; metrics?: DialogueMetrics; audioChunks?: ArrayBuffer[]; audioTooLarge?: boolean } | undefined;
+function clearLastReplay(): void {
+  lastReplayAudio = [];
+  replayAudioButton!.disabled = true;
+}
+function saveLastReplay(chunks: ArrayBuffer[]): boolean {
+  const bytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  if (!chunks.length || bytes > MAX_REPLAY_AUDIO_BYTES) {
+    clearLastReplay();
+    return false;
+  }
+  lastReplayAudio = chunks.map(chunk => chunk.slice(0));
+  replayAudioButton!.disabled = false;
+  return true;
+}
 const audioPlayer = new AudioPlayer({ onEnded: () => {
   playbackFinished?.();
   playbackFinished = undefined;
@@ -111,6 +128,7 @@ function stopSpeech(): void {
   speechSequenceActive = false;
   retrySpeech = undefined;
   retrySpeechButton!.disabled = true;
+  replayAudioButton!.disabled = !lastReplayAudio.length;
   playbackFinished?.();
   playbackFinished = undefined;
   speechRequest?.abort();
@@ -197,9 +215,13 @@ function splitSpeechText(text: string, maxChars = 350): string[] {
   return chunks;
 }
 
-async function playSpeechSequence(text: string, generation: number, metrics?: DialogueMetrics, startAt = 0, retainedChunks?: string[]): Promise<void> {
+async function playSpeechSequence(text: string, generation: number, metrics?: DialogueMetrics, startAt = 0, retainedChunks?: string[], retainedAudio?: ArrayBuffer[], audioTooLarge = false): Promise<void> {
   if (generation !== speechGeneration) return;
   const chunks = retainedChunks ?? splitSpeechText(text);
+  const completedAudio = retainedAudio ? [...retainedAudio] : [];
+  let completedAudioBytes = completedAudio.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  let replayTooLarge = audioTooLarge || completedAudioBytes > MAX_REPLAY_AUDIO_BYTES;
+  if (replayTooLarge) { completedAudio.length = 0; completedAudioBytes = 0; }
   retrySpeech = undefined;
   retrySpeechButton!.disabled = true;
   speechSequenceActive = true;
@@ -233,6 +255,15 @@ async function playSpeechSequence(text: string, generation: number, metrics?: Di
       if (generation !== speechGeneration) { playbackFinished?.(); return; }
       setState('speaking');
       await ended;
+      if (generation !== speechGeneration) return;
+      if (!replayTooLarge && completedAudioBytes + wav.byteLength <= MAX_REPLAY_AUDIO_BYTES) {
+        completedAudio.push(wav.slice(0));
+        completedAudioBytes += wav.byteLength;
+      } else {
+        replayTooLarge = true;
+        completedAudio.length = 0;
+        completedAudioBytes = 0;
+      }
     } catch (error) {
       if (generation !== speechGeneration) return;
       speechSequenceActive = false;
@@ -240,7 +271,7 @@ async function playSpeechSequence(text: string, generation: number, metrics?: Di
       character?.setMouthOpen(0);
       setState('idle');
       const complete = index === 0 ? 'Sprachausgabe fehlgeschlagen.' : `Sprachausgabe teilweise fehlgeschlagen: ${index} von ${chunks.length} Abschnitten wurden abgespielt.`;
-      retrySpeech = { chunks, nextIndex: index, generation, metrics };
+      retrySpeech = { chunks, nextIndex: index, generation, metrics, audioChunks: completedAudio, audioTooLarge: replayTooLarge };
       retrySpeechButton!.disabled = false;
       speechStatus!.textContent = `${complete} Fehlgeschlagenen Abschnitt gezielt wiederholen möglich.`;
       notice!.textContent = complete + ' Textantwort bleibt erhalten.';
@@ -254,11 +285,49 @@ async function playSpeechSequence(text: string, generation: number, metrics?: Di
   if (generation === speechGeneration) {
     speechSequenceActive = false;
     stopAudioButton!.disabled = true;
-    speechStatus!.textContent = 'Wiedergabe beendet.';
+    const replaySaved = !replayTooLarge && saveLastReplay(completedAudio);
+    speechStatus!.textContent = replaySaved ? 'Wiedergabe beendet.' : 'Wiedergabe beendet; Antwort ist zu groß zum Wiederholen.';
     setState('idle');
   }
 }
 stopAudioButton.addEventListener('click', () => { dialogueMetrics = undefined; stopSpeech(); speechStatus.textContent = 'Wiedergabe gestoppt.'; });
+replayAudioButton.addEventListener('click', () => {
+  if (!lastReplayAudio.length || send!.disabled || recording || disposed) return;
+  const audio = lastReplayAudio;
+  const generation = speechGeneration + 1;
+  stopSpeech();
+  const replayGeneration = speechGeneration;
+  if (generation !== replayGeneration) return;
+  replayAudioButton!.disabled = true;
+  speechSequenceActive = true;
+  stopAudioButton!.disabled = false;
+  speechStatus!.textContent = 'Letzte Antwort wird wiederholt.';
+  void audioPlayer.initialize().then(async () => {
+    for (let index = 0; index < audio.length; index++) {
+      if (replayGeneration !== speechGeneration || disposed) return;
+      const ended = new Promise<void>(resolve => { playbackFinished = resolve; });
+      await audioPlayer.playWav(audio[index]);
+      if (replayGeneration !== speechGeneration || disposed) { playbackFinished?.(); return; }
+      setState('speaking');
+      await ended;
+    }
+    if (replayGeneration === speechGeneration && !disposed) {
+      speechSequenceActive = false;
+      stopAudioButton!.disabled = true;
+      speechStatus!.textContent = 'Wiedergabe beendet.';
+      setState('idle');
+      replayAudioButton!.disabled = !lastReplayAudio.length;
+    }
+  }).catch(error => {
+    if (replayGeneration !== speechGeneration || disposed) return;
+    speechSequenceActive = false;
+    stopAudioButton!.disabled = true;
+    speechStatus!.textContent = 'Wiederholung nicht verfügbar.';
+    replayAudioButton!.disabled = !lastReplayAudio.length;
+    setState('idle');
+    console.error(error);
+  });
+});
 retrySpeechButton.addEventListener('click', () => {
   const retry = retrySpeech;
   if (!retry || retry.generation !== speechGeneration) return;
@@ -267,7 +336,7 @@ retrySpeechButton.addEventListener('click', () => {
   notice!.textContent = '';
   // initialize() is invoked in this click handler so a suspended AudioContext can resume.
   void audioPlayer.initialize().then(
-    () => playSpeechSequence('', retry.generation, retry.metrics, retry.nextIndex, retry.chunks),
+    () => playSpeechSequence('', retry.generation, retry.metrics, retry.nextIndex, retry.chunks, retry.audioChunks, retry.audioTooLarge),
     () => {
       if (retry.generation !== speechGeneration) return;
       retrySpeech = retry;
@@ -432,6 +501,7 @@ function animate() {
 if (renderer) animate();
 window.addEventListener('pagehide', () => {
   disposed = true;
+  clearLastReplay();
   cancelCapture();
   capture.dispose();
   stopSpeech();
@@ -485,6 +555,7 @@ form.addEventListener('submit', async event => {
   appendMessage('Du', message);
   input.value = '';
   send.disabled = true;
+  replayAudioButton!.disabled = true;
   notice.textContent = '';
   setState('thinking');
   let canSpeak = false;
@@ -492,6 +563,9 @@ form.addEventListener('submit', async event => {
   const progressiveChunks: string[] = [];
   const progressiveQueue: string[] = [];
   let progressivePlayed = 0;
+  const progressiveAudio: ArrayBuffer[] = [];
+  let progressiveAudioBytes = 0;
+  let progressiveAudioTooLarge = false;
   let progressiveFinished = false;
   let progressiveFailed = false;
   let progressiveWorker: Promise<void> | undefined;
@@ -554,6 +628,14 @@ form.addEventListener('submit', async event => {
           await ended;
           if (generation !== speechGeneration) break;
           progressivePlayed++;
+          if (!progressiveAudioTooLarge && progressiveAudioBytes + wav.byteLength <= MAX_REPLAY_AUDIO_BYTES) {
+            progressiveAudio.push(wav.slice(0));
+            progressiveAudioBytes += wav.byteLength;
+          } else {
+            progressiveAudioTooLarge = true;
+            progressiveAudio.length = 0;
+            progressiveAudioBytes = 0;
+          }
         } catch (error) {
           if (generation === speechGeneration) {
             progressiveFailed = true;
@@ -707,12 +789,13 @@ form.addEventListener('submit', async event => {
       stopAudioButton!.disabled = true;
       if (progressiveFailed) {
         setState('idle');
-        retrySpeech = { chunks: progressiveChunks, nextIndex: progressivePlayed, generation, metrics };
+        retrySpeech = { chunks: progressiveChunks, nextIndex: progressivePlayed, generation, metrics, audioChunks: progressiveAudio, audioTooLarge: progressiveAudioTooLarge };
         retrySpeechButton!.disabled = progressivePlayed >= progressiveChunks.length;
         speechStatus!.textContent = `Sprachausgabe teilweise fehlgeschlagen: ${progressivePlayed} von ${progressiveChunks.length} Abschnitten. Fehlgeschlagenen Abschnitt wiederholen möglich.`;
         notice.textContent = 'Sprachausgabe teilweise fehlgeschlagen. Textantwort bleibt erhalten.';
       } else {
-        speechStatus!.textContent = 'Wiedergabe beendet.';
+        const replaySaved = !progressiveAudioTooLarge && saveLastReplay(progressiveAudio);
+        speechStatus!.textContent = replaySaved ? 'Wiedergabe beendet.' : 'Wiedergabe beendet; Antwort ist zu groß zum Wiederholen.';
         setState('idle');
       }
     } else {
@@ -737,6 +820,7 @@ form.addEventListener('submit', async event => {
     if (wakeProgressiveQueue === signalProgressive) wakeProgressiveQueue = undefined;
     if (state !== 'speaking') setState('idle');
     send.disabled = false;
+    replayAudioButton!.disabled = !lastReplayAudio.length;
     input.focus();
   }
 });

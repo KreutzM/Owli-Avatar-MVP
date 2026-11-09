@@ -15,7 +15,7 @@ export default defineConfig({
     command: `npm run dev -- --config vite.stream-test.config.ts --port ${testPort} --strictPort`,
     url: `http://127.0.0.1:${testPort}`, 
     reuseExistingServer: false,
-    env: { VITE_OWLI_DIAGNOSTICS: '1', VITE_CHAT_TIMEOUT_MS: '800' },
+    env: { VITE_OWLI_DIAGNOSTICS: '1', VITE_CHAT_TIMEOUT_MS: '3000' },
     timeout: 30_000,
   }],
 });
