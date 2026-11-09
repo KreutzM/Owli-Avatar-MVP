@@ -49,6 +49,18 @@ def test_ollama_stream_rejects_bad_or_incomplete_events(body):
     assert error.value.code == "INVALID_PROVIDER_RESPONSE"
 
 
+def test_ollama_stream_rejects_unterminated_line_before_buffering_it():
+    body = b"{" + b" " * 65536
+
+    async def scenario():
+        provider = OllamaProvider("http://127.0.0.1:11434", "local", transport=httpx.MockTransport(lambda _: httpx.Response(200, content=body)))
+        return [item async for item in provider.stream([])]
+
+    with pytest.raises(ProviderError) as error:
+        run(scenario())
+    assert error.value.code == "INVALID_PROVIDER_RESPONSE"
+
+
 def test_ollama_stream_enforces_cumulative_character_limit():
     body = ndjson(
         {"message": {"content": "x" * 3000}, "done": False},

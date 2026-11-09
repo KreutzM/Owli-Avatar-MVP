@@ -302,6 +302,7 @@ form.addEventListener('submit', async event => {
   notice.textContent = '';
   setState('thinking');
   let chatCompleted = false;
+  let incompleteReplyLine: HTMLParagraphElement | undefined;
   try {
     const controller = new AbortController();
     const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 65000;
@@ -309,7 +310,6 @@ form.addEventListener('submit', async event => {
     let streamedReply = '';
     let chatMode: 'mock' | 'ollama' | undefined;
     let candidateSessionId: string | undefined;
-    let replyLine: HTMLParagraphElement | undefined;
     let firstDeltaAt: number | undefined;
     const chatStarted = performance.now();
     const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
@@ -345,12 +345,12 @@ form.addEventListener('submit', async event => {
             || (item.mode !== 'mock' && item.mode !== 'ollama')) throw new Error('Invalid chat stream start');
           candidateSessionId = item.session_id;
           chatMode = item.mode;
-          replyLine = appendMessage(chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', '');
+          incompleteReplyLine = appendMessage(chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)', '');
         } else if (item.type === 'delta') {
-          if (!replyLine || typeof item.text !== 'string' || !item.text || streamedReply.length + item.text.length > 4000) throw new Error('Invalid chat stream delta');
+          if (!incompleteReplyLine || typeof item.text !== 'string' || !item.text || streamedReply.length + item.text.length > 4000) throw new Error('Invalid chat stream delta');
           firstDeltaAt ??= performance.now();
           streamedReply += item.text;
-          replyLine.textContent = (chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)') + ': ' + streamedReply;
+          incompleteReplyLine.textContent = (chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)') + ': ' + streamedReply;
           messages!.scrollTop = messages!.scrollHeight;
         } else if (item.type === 'done') {
           if (!candidateSessionId || typeof item.reply !== 'string' || item.reply !== streamedReply
@@ -421,6 +421,10 @@ form.addEventListener('submit', async event => {
       notice.textContent = 'Textantwort ohne Ton.';
     }
   } catch (error) {
+    if (!chatCompleted && incompleteReplyLine) {
+      incompleteReplyLine.textContent += ' (Antwort unvollständig, nicht gespeichert)';
+      incompleteReplyLine.dataset.status = 'incomplete';
+    }
     if (dialogueMetrics === metrics) dialogueMetrics = undefined;
     if (generation === speechGeneration) {
       stopSpeech();
