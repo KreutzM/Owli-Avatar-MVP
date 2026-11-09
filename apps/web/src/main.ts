@@ -74,6 +74,8 @@ const setState = (next: AvatarState) => {
 };
 let speechGeneration = 0;
 let speechRequest: AbortController | undefined;
+let activeChatRequest: AbortController | undefined;
+let wakeProgressiveQueue: (() => void) | undefined;
 let speechSequenceActive = false;
 let playbackFinished: (() => void) | undefined;
 let retrySpeech: { chunks: string[]; nextIndex: number; generation: number; metrics?: DialogueMetrics } | undefined;
@@ -86,6 +88,12 @@ const audioPlayer = new AudioPlayer({ onEnded: () => {
     speechStatus.textContent = 'Wiedergabe beendet.';
   }
 }, onPlaybackScheduled: () => {
+  if (!performance.getEntriesByName('owli:first-audio-source-start').length) {
+    performance.mark('owli:first-audio-source-start');
+    if (performance.getEntriesByName('owli:chat-start').length) {
+      performance.measure('owli:first-audio-source-ms', 'owli:chat-start', 'owli:first-audio-source-start');
+    }
+  }
   const metrics = dialogueMetrics;
   if (!diagnosticsEnabled || !metrics) return;
   addTiming(metrics, 'capture_to_playback_ms', metrics.captureEndedAt, performance.now());
@@ -97,6 +105,9 @@ const audioPlayer = new AudioPlayer({ onEnded: () => {
 }});
 function stopSpeech(): void {
   speechGeneration++;
+  activeChatRequest?.abort();
+  activeChatRequest = undefined;
+  wakeProgressiveQueue?.();
   speechSequenceActive = false;
   retrySpeech = undefined;
   retrySpeechButton!.disabled = true;
@@ -108,6 +119,50 @@ function stopSpeech(): void {
   character?.setMouthOpen(0);
   stopAudioButton!.disabled = true;
   setState('idle');
+}
+
+/** Return only complete or safely bounded speech chunks; retain unstable text. */
+function takeSpeechChunks(buffer: string, flush = false, maxChars = 350): { chunks: string[]; rest: string } {
+  const chars = Array.from(buffer);
+  const chunks: string[] = [];
+  let start = 0;
+  const punct = '.!?。！？';
+  const closers = `\"'»”’)]}`;
+  while (start < chars.length) {
+    const limit = Math.min(chars.length, start + maxChars);
+    let sentenceEnd = -1;
+    for (let i = start; i < limit; i++) {
+      if (!punct.includes(chars[i])) continue;
+      if (!/[\p{L}\p{N}]/u.test(chars.slice(start, i).join(''))) continue;
+      let end = i + 1;
+      while (end < chars.length && punct.includes(chars[end])) end++;
+      while (end < chars.length && closers.includes(chars[end])) end++;
+      if (end <= limit && end < chars.length && /\s/u.test(chars[end])) {
+        while (end < limit && end < chars.length && /\s/u.test(chars[end])) end++;
+        sentenceEnd = end;
+      }
+      else if (flush && end === chars.length && end <= limit) sentenceEnd = end;
+    }
+    if (sentenceEnd > start) {
+      chunks.push(chars.slice(start, sentenceEnd).join(''));
+      start = sentenceEnd;
+      continue;
+    }
+    if (chars.length - start > maxChars) {
+      let cut = -1;
+      for (let i = start; i < limit; i++) if (/\s/u.test(chars[i])) cut = i + 1;
+      if (cut < 0) cut = limit;
+      chunks.push(chars.slice(start, cut).join(''));
+      start = cut;
+      continue;
+    }
+    if (flush) {
+      chunks.push(chars.slice(start).join(''));
+      start = chars.length;
+    }
+    break;
+  }
+  return { chunks, rest: chars.slice(start).join('') };
 }
 
 // Keep Piper requests comfortably below its per-WAV duration limit. Cut at the last
@@ -432,10 +487,106 @@ form.addEventListener('submit', async event => {
   send.disabled = true;
   notice.textContent = '';
   setState('thinking');
+  let canSpeak = false;
+  let progressiveBuffer = '';
+  const progressiveChunks: string[] = [];
+  const progressiveQueue: string[] = [];
+  let progressivePlayed = 0;
+  let progressiveFinished = false;
+  let progressiveFailed = false;
+  let progressiveWorker: Promise<void> | undefined;
+  const progressiveWaiters: Array<() => void> = [];
+  const signalProgressive = () => { for (const wake of progressiveWaiters.splice(0)) wake(); };
+  wakeProgressiveQueue = signalProgressive;
+  const waitProgressive = () => new Promise<void>(resolve => progressiveWaiters.push(resolve));
+  let pauseChatTimeout = () => {};
+  let resumeChatTimeout = () => {};
+  const enqueueProgressive = async (chunk: string): Promise<void> => {
+    if (!chunk) return;
+    progressiveChunks.push(chunk);
+    while (progressiveQueue.length >= 2 && !progressiveFailed && generation === speechGeneration) {
+      pauseChatTimeout();
+      try { await waitProgressive(); } finally { resumeChatTimeout(); }
+    }
+    if (progressiveFailed || generation !== speechGeneration) return;
+    progressiveQueue.push(chunk);
+    signalProgressive();
+    if (progressiveWorker) return;
+    speechSequenceActive = true;
+    stopAudioButton!.disabled = false;
+    progressiveWorker = (async () => {
+      while (generation === speechGeneration) {
+        if (!progressiveQueue.length) {
+          if (progressiveFinished || progressiveFailed) break;
+          await waitProgressive();
+          continue;
+        }
+        const part = progressiveQueue.shift()!;
+        signalProgressive();
+        const index = progressivePlayed;
+        const synth = new AbortController();
+        speechRequest = synth;
+        speechStatus!.textContent = `Sprachausgabe wird erzeugt · Abschnitt ${index + 1}`;
+        const timeout = window.setTimeout(() => synth.abort(), 65000);
+        try {
+          const started = performance.now();
+          if (!performance.getEntriesByName('owli:first-tts-request').length) {
+            performance.mark('owli:first-tts-request');
+            if (performance.getEntriesByName('owli:chat-start').length) {
+              performance.measure('owli:first-tts-request-ms', 'owli:chat-start', 'owli:first-tts-request');
+            }
+          }
+          const response = await fetch('/api/tts', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' },
+            body: JSON.stringify({ text: part }), signal: synth.signal,
+          });
+          if (!response.ok) throw new Error(`TTS HTTP ${response.status}`);
+          const providerMs = serverDuration(response, 'piper');
+          const wav = await response.arrayBuffer();
+          addTiming(dialogueMetrics === metrics ? metrics : undefined, 'tts_request_ms', started, performance.now());
+          if (providerMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.piper_ms = providerMs;
+          if (generation !== speechGeneration) break;
+          speechStatus!.textContent = `Wiedergabe läuft · Abschnitt ${index + 1}`;
+          const ended = new Promise<void>(resolve => { playbackFinished = resolve; });
+          await audioPlayer.playWav(wav);
+          if (generation !== speechGeneration) { playbackFinished?.(); break; }
+          setState('speaking');
+          await ended;
+          if (generation !== speechGeneration) break;
+          progressivePlayed++;
+        } catch (error) {
+          if (generation === speechGeneration) {
+            progressiveFailed = true;
+            progressiveQueue.length = 0;
+            console.error(error);
+          }
+        } finally {
+          window.clearTimeout(timeout);
+          if (speechRequest === synth) speechRequest = undefined;
+          signalProgressive();
+        }
+        if (progressiveFailed) break;
+      }
+    })();
+  };
+  const feedProgressive = async (text: string, flush = false): Promise<void> => {
+    if (!canSpeak || generation !== speechGeneration) return;
+    progressiveBuffer += text;
+    const extracted = takeSpeechChunks(progressiveBuffer, flush);
+    progressiveBuffer = extracted.rest;
+    if (extracted.chunks.length && !performance.getEntriesByName('owli:first-stable-sentence').length) {
+      performance.mark('owli:first-stable-sentence');
+      if (performance.getEntriesByName('owli:chat-start').length) {
+        performance.measure('owli:first-stable-sentence-ms', 'owli:chat-start', 'owli:first-stable-sentence');
+      }
+    }
+    for (const chunk of extracted.chunks) await enqueueProgressive(chunk);
+  };
   let chatCompleted = false;
   let incompleteReplyLine: HTMLParagraphElement | undefined;
+  const controller = new AbortController();
+  activeChatRequest = controller;
   try {
-    const controller = new AbortController();
     const timeoutLimit = Number(import.meta.env.VITE_CHAT_TIMEOUT_MS) || 65000;
     let response: Response;
     let streamedReply = '';
@@ -443,7 +594,25 @@ form.addEventListener('submit', async event => {
     let candidateSessionId: string | undefined;
     let firstDeltaAt: number | undefined;
     const chatStarted = performance.now();
-    const timeout = window.setTimeout(() => controller.abort(), Math.max(250, timeoutLimit));
+    for (const name of ['owli:chat-start', 'owli:first-llm-delta', 'owli:first-stable-sentence', 'owli:first-tts-request', 'owli:first-audio-source-start']) performance.clearMarks(name);
+    for (const name of ['owli:first-llm-token-ms', 'owli:first-stable-sentence-ms', 'owli:first-tts-request-ms', 'owli:first-audio-source-ms']) performance.clearMeasures(name);
+    performance.mark('owli:chat-start');
+    canSpeak = wantsSpeech && await audioReady;
+    let timeoutRemaining = Math.max(250, timeoutLimit);
+    let timeoutStartedAt = performance.now();
+    let timeout: number | undefined;
+    resumeChatTimeout = () => {
+      if (timeout !== undefined || controller.signal.aborted) return;
+      timeoutStartedAt = performance.now();
+      timeout = window.setTimeout(() => controller.abort(), timeoutRemaining);
+    };
+    pauseChatTimeout = () => {
+      if (timeout === undefined) return;
+      window.clearTimeout(timeout);
+      timeout = undefined;
+      timeoutRemaining = Math.max(250, timeoutRemaining - (performance.now() - timeoutStartedAt));
+    };
+    resumeChatTimeout();
     try {
       response = await fetch('/api/chat/stream', {
         method: 'POST',
@@ -464,7 +633,7 @@ form.addEventListener('submit', async event => {
       let pending = '';
       let streamBytes = 0;
       let finished = false;
-      const handleLine = (line: string) => {
+      const handleLine = async (line: string) => {
         if (!line) return;
         if (finished) throw new Error('Chat stream event after completion');
         if (line.length > 65536) throw new Error('Chat stream event too large');
@@ -480,9 +649,14 @@ form.addEventListener('submit', async event => {
         } else if (item.type === 'delta') {
           if (!incompleteReplyLine || typeof item.text !== 'string' || !item.text || streamedReply.length + item.text.length > 4000) throw new Error('Invalid chat stream delta');
           firstDeltaAt ??= performance.now();
+          if (!performance.getEntriesByName('owli:first-llm-delta').length) {
+            performance.mark('owli:first-llm-delta');
+            performance.measure('owli:first-llm-token-ms', 'owli:chat-start', 'owli:first-llm-delta');
+          }
           streamedReply += item.text;
           incompleteReplyLine.textContent = (chatMode === 'ollama' ? 'Eule (Ollama)' : 'Eule (Mock)') + ': ' + streamedReply;
           messages!.scrollTop = messages!.scrollHeight;
+          await feedProgressive(item.text);
         } else if (item.type === 'done') {
           if (!candidateSessionId || typeof item.reply !== 'string' || item.reply !== streamedReply
             || item.session_id !== candidateSessionId || item.mode !== chatMode || !streamedReply.trim()) throw new Error('Invalid chat stream completion');
@@ -499,14 +673,14 @@ form.addEventListener('submit', async event => {
         pending += decoder.decode(value, { stream: true });
         let newline = pending.indexOf('\n');
         while (newline !== -1) {
-          handleLine(pending.slice(0, newline));
+          await handleLine(pending.slice(0, newline));
           pending = pending.slice(newline + 1);
           newline = pending.indexOf('\n');
         }
         if (pending.length > 65536) throw new Error('Chat stream event too large');
       }
       pending += decoder.decode();
-      if (pending) handleLine(pending);
+      if (pending) await handleLine(pending);
       if (!finished || !candidateSessionId || !chatMode) throw new Error('Incomplete chat stream');
       acceptedStream = true;
       } finally {
@@ -516,17 +690,31 @@ form.addEventListener('submit', async event => {
         }
       }
       chatCompleted = true;
+      if (activeChatRequest === controller) activeChatRequest = undefined;
       sessionId = candidateSessionId;
       addTiming(dialogueMetrics === metrics ? metrics : undefined, 'chat_request_ms', chatStarted, performance.now());
       if (firstDeltaAt !== undefined && dialogueMetrics === metrics && metrics) metrics.values.chat_first_token_ms = firstDeltaAt - chatStarted;
     } finally {
-      window.clearTimeout(timeout);
+      if (timeout !== undefined) window.clearTimeout(timeout);
     }
-    const chatResult = { reply: streamedReply, mode: chatMode!, session_id: candidateSessionId! };
-    if (wantsSpeech && generation === speechGeneration) {
-      if (!(await audioReady)) throw new Error('Audio unavailable');
+    if (canSpeak && generation === speechGeneration) {
+      await feedProgressive('', true);
+      progressiveFinished = true;
+      signalProgressive();
+      await progressiveWorker;
       if (generation !== speechGeneration) return;
-      await playSpeechSequence(chatResult.reply, generation, metrics);
+      speechSequenceActive = false;
+      stopAudioButton!.disabled = true;
+      if (progressiveFailed) {
+        setState('idle');
+        retrySpeech = { chunks: progressiveChunks, nextIndex: progressivePlayed, generation, metrics };
+        retrySpeechButton!.disabled = progressivePlayed >= progressiveChunks.length;
+        speechStatus!.textContent = `Sprachausgabe teilweise fehlgeschlagen: ${progressivePlayed} von ${progressiveChunks.length} Abschnitten. Fehlgeschlagenen Abschnitt wiederholen möglich.`;
+        notice.textContent = 'Sprachausgabe teilweise fehlgeschlagen. Textantwort bleibt erhalten.';
+      } else {
+        speechStatus!.textContent = 'Wiedergabe beendet.';
+        setState('idle');
+      }
     } else {
       notice.textContent = 'Textantwort ohne Ton.';
     }
@@ -545,6 +733,8 @@ form.addEventListener('submit', async event => {
       console.error(error);
     }
   } finally {
+    if (activeChatRequest?.signal.aborted || chatCompleted) activeChatRequest = undefined;
+    if (wakeProgressiveQueue === signalProgressive) wakeProgressiveQueue = undefined;
     if (state !== 'speaking') setState('idle');
     send.disabled = false;
     input.focus();
