@@ -68,3 +68,46 @@ class OllamaProvider:
             raise ProviderError("PROVIDER_TIMEOUT", 504, "The text provider timed out") from exc
         except httpx.RequestError as exc:
             raise ProviderError("PROVIDER_UNAVAILABLE", 503, "The text provider is unavailable") from exc
+
+    async def stream(self, messages: list[dict[str, str]]):
+        """Yield bounded response text deltas from Ollama's NDJSON protocol."""
+        payload = {"model": self.model, "messages": messages, "stream": True, "options": {"num_predict": 256}}
+        if self.think != "auto":
+            payload["think"] = self.think == "true"
+        total_chars = 0
+        saw_done = False
+        try:
+            async with asyncio.timeout(self.total_timeout):
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.total_timeout, connect=self.connect_timeout), transport=self.transport, trust_env=False, follow_redirects=False) as client:
+                    async with client.stream("POST", self.base_url + "/api/chat", json=payload) as response:
+                        if response.status_code == 404:
+                            raise ProviderError("MODEL_NOT_FOUND", 503, "The configured model is unavailable")
+                        if not 200 <= response.status_code < 300:
+                            raise ProviderError("PROVIDER_ERROR", 502, "The text provider could not complete the request")
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            if len(line.encode("utf-8")) > 65536:
+                                raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response")
+                            try:
+                                part = json.loads(line)
+                                content = part.get("message", {}).get("content", "")
+                                done = part.get("done")
+                                if not isinstance(content, str) or not isinstance(done, bool):
+                                    raise ValueError
+                                if content:
+                                    total_chars += len(content)
+                                    if total_chars > 4000:
+                                        raise ValueError
+                                    yield content
+                                if done:
+                                    saw_done = True
+                                    break
+                            except (ValueError, TypeError, AttributeError) as exc:
+                                raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response") from exc
+                        if not saw_done or total_chars == 0:
+                            raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an incomplete response")
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            raise ProviderError("PROVIDER_TIMEOUT", 504, "The text provider timed out") from exc
+        except httpx.RequestError as exc:
+            raise ProviderError("PROVIDER_UNAVAILABLE", 503, "The text provider is unavailable") from exc
