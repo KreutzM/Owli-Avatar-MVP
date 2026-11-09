@@ -105,7 +105,17 @@ export class VuenaCharacterAdapter implements CharacterAdapter {
     }
 
     const idle = gltf.animations.find((clip: AnimationClip) => clip.name.toLowerCase() === 'idle');
-    this.idleAction = idle ? this.mixer.clipAction(idle) : undefined;
+    // The authored sample's short idle repeatedly sweeps the head. Keep its body,
+    // tail, wing and eyelid tracks, while driving head/neck attitude from semantic
+    // avatar state below so the same fast bob cannot run during every state.
+    const calmIdle = idle && new AnimationClip(
+      idle.name,
+      idle.duration,
+      idle.tracks.filter(track => !/(?:^|\.)(?:Head|Neck)\.(?:quaternion|rotation)$/i.test(track.name)),
+      idle.blendMode,
+    );
+    this.idleAction = calmIdle ? this.mixer.clipAction(calmIdle) : undefined;
+    this.idleAction?.setEffectiveTimeScale(0.75);
     this.jawRest = this.jaw?.quaternion.clone().normalize();
     // Sample the original call clip once; never run it as a speaking loop.
     const call = gltf.animations.find(clip => clip.name.toLowerCase() === 'call');
@@ -158,7 +168,11 @@ export class VuenaCharacterAdapter implements CharacterAdapter {
   }
 
   setState(state: CharacterState): void {
-    this.targetTilt = state === 'listening' ? -0.045 : state === 'thinking' ? 0.065 : 0;
+    this.targetTilt = state === 'listening' ? -0.035
+      : state === 'thinking' ? 0.05
+      : state === 'speaking' ? 0.025
+      : state === 'error' ? -0.025
+      : 0;
   }
 
   setMouthOpen(amount: number): void {
@@ -187,7 +201,7 @@ export class VuenaCharacterAdapter implements CharacterAdapter {
     this.mixer.update(delta);
     if (this.jaw) this.jawBase = this.jaw.quaternion.clone();
     if (this.lids) this.lidsBase = this.lids.position.clone();
-    this.root.rotation.z += (this.targetTilt - this.root.rotation.z) * (1 - Math.exp(-4 * delta));
+    this.root.rotation.z += (this.targetTilt - this.root.rotation.z) * (1 - Math.exp(-2.5 * delta));
 
     for (const {mesh, index} of this.mouthMorphs) {
       if (mesh.morphTargetInfluences) mesh.morphTargetInfluences[index] = this.mouthAmount;
