@@ -1,4 +1,4 @@
-import { test, expect } from './chat-stream-fixtures';
+import { test, expect, fulfillChatStream } from './chat-stream-fixtures';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -8,7 +8,7 @@ test.beforeEach(async ({ page }) => {
     if (path === '/api/health') return route.fulfill({ json: { status: 'ok', mode: 'mock' } });
     if (path === '/api/stt/status') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/tts/status') return route.fulfill({ json: { enabled: false } });
-    if (path === '/api/chat') return route.fulfill({ json: { reply: 'Mock-Antwort', session_id: 'fixture', mode: 'mock' } });
+    if (path === '/api/chat/stream') return fulfillChatStream(route, { reply: 'Mock-Antwort', session_id: 'fixture', mode: 'mock' });
     return route.fulfill({ status: 501, json: { error: { code: 'TEST_UNMOCKED', message: 'No API in avatar tests' } } });
   });
 });
