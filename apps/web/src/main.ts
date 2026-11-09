@@ -29,13 +29,14 @@ const notice = document.querySelector<HTMLParagraphElement>('#notice');
 const send = document.querySelector<HTMLButtonElement>('#send');
 const speechEnabled = document.querySelector<HTMLInputElement>('#speech-enabled');
 const stopAudioButton = document.querySelector<HTMLButtonElement>('#stop-audio');
+const retrySpeechButton = document.querySelector<HTMLButtonElement>('#retry-speech');
 const speechStatus = document.querySelector<HTMLParagraphElement>('#speech-status');
 const volume = document.querySelector<HTMLInputElement>('#volume');
 const ptt = document.querySelector<HTMLButtonElement>('#ptt');
 const pttCancel = document.querySelector<HTMLButtonElement>('#ptt-cancel');
 const sttStatus = document.querySelector<HTMLParagraphElement>('#stt-status');
 const autoSend = document.querySelector<HTMLInputElement>('#voice-auto-send');
-if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !speechStatus || !volume || !ptt || !pttCancel || !sttStatus || !autoSend) {
+if (!host || !stateLabel || !form || !input || !messages || !notice || !send || !speechEnabled || !stopAudioButton || !retrySpeechButton || !speechStatus || !volume || !ptt || !pttCancel || !sttStatus || !autoSend) {
   throw new Error('Required UI elements missing');
 }
 
@@ -73,10 +74,17 @@ const setState = (next: AvatarState) => {
 };
 let speechGeneration = 0;
 let speechRequest: AbortController | undefined;
+let speechSequenceActive = false;
+let playbackFinished: (() => void) | undefined;
+let retrySpeech: { chunks: string[]; nextIndex: number; generation: number; metrics?: DialogueMetrics } | undefined;
 const audioPlayer = new AudioPlayer({ onEnded: () => {
-  setState('idle');
-  stopAudioButton!.disabled = true;
-  speechStatus.textContent = 'Wiedergabe beendet.';
+  playbackFinished?.();
+  playbackFinished = undefined;
+  if (!speechSequenceActive) {
+    setState('idle');
+    stopAudioButton!.disabled = true;
+    speechStatus.textContent = 'Wiedergabe beendet.';
+  }
 }, onPlaybackScheduled: () => {
   const metrics = dialogueMetrics;
   if (!diagnosticsEnabled || !metrics) return;
@@ -89,6 +97,11 @@ const audioPlayer = new AudioPlayer({ onEnded: () => {
 }});
 function stopSpeech(): void {
   speechGeneration++;
+  speechSequenceActive = false;
+  retrySpeech = undefined;
+  retrySpeechButton!.disabled = true;
+  playbackFinished?.();
+  playbackFinished = undefined;
   speechRequest?.abort();
   speechRequest = undefined;
   audioPlayer.stop();
@@ -96,7 +109,118 @@ function stopSpeech(): void {
   stopAudioButton!.disabled = true;
   setState('idle');
 }
+
+// Keep Piper requests comfortably below its per-WAV duration limit. Cut at the last
+// sentence boundary in the safe window, then at whitespace or a Unicode code point.
+// Slicing the original code point array keeps leading punctuation and every space.
+function splitSpeechText(text: string, maxChars = 350): string[] {
+  if (!text) return [];
+  const chars = Array.from(text);
+  const chunks: string[] = [];
+  let start = 0;
+  const isPunctuation = (char: string) => '.!?。！？'.includes(char);
+  const isClosingMark = (char: string) => `"'»”’)]}`.includes(char);
+  while (start < chars.length) {
+    const limit = Math.min(chars.length, start + maxChars);
+    if (limit === chars.length) { chunks.push(chars.slice(start).join('')); break; }
+    let sentenceCut = -1;
+    for (let i = start; i < limit; i++) {
+      if (!isPunctuation(chars[i])) continue;
+      let end = i + 1;
+      while (end < chars.length && isPunctuation(chars[end])) end++;
+      while (end < chars.length && isClosingMark(chars[end])) end++;
+      if (end <= limit && (end === chars.length || /\s/u.test(chars[end]))) sentenceCut = end;
+    }
+    let cut = sentenceCut;
+    if (cut < 0) {
+      for (let i = start; i < limit; i++) if (/\s/u.test(chars[i])) cut = i + 1;
+    }
+    if (cut < 0) cut = limit;
+    chunks.push(chars.slice(start, cut).join(''));
+    start = cut;
+  }
+  return chunks;
+}
+
+async function playSpeechSequence(text: string, generation: number, metrics?: DialogueMetrics, startAt = 0, retainedChunks?: string[]): Promise<void> {
+  if (generation !== speechGeneration) return;
+  const chunks = retainedChunks ?? splitSpeechText(text);
+  retrySpeech = undefined;
+  retrySpeechButton!.disabled = true;
+  speechSequenceActive = true;
+  stopAudioButton!.disabled = false;
+  for (let index = startAt; index < chunks.length; index++) {
+    if (generation !== speechGeneration) return;
+    const synth = new AbortController();
+    speechRequest = synth;
+    speechStatus!.textContent = chunks.length > 1
+      ? `Sprachausgabe wird erzeugt … Abschnitt ${index + 1} von ${chunks.length}`
+      : 'Sprachausgabe wird erzeugt …';
+    const synthTimeout = window.setTimeout(() => synth.abort(), 65000);
+    const ttsStarted = performance.now();
+    let response: Response;
+    try {
+      response = await fetch('/api/tts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' },
+        body: JSON.stringify({ text: chunks[index] }), signal: synth.signal,
+      });
+      if (!response.ok) throw new Error(`TTS HTTP ${response.status}`);
+      const piperProviderMs = serverDuration(response, 'piper');
+      const wav = await response.arrayBuffer();
+      addTiming(dialogueMetrics === metrics ? metrics : undefined, 'tts_request_ms', ttsStarted, performance.now());
+      if (piperProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.piper_ms = piperProviderMs;
+      if (generation !== speechGeneration) return;
+      speechStatus!.textContent = chunks.length > 1
+        ? `Wiedergabe läuft · Abschnitt ${index + 1} von ${chunks.length}`
+        : 'Wiedergabe läuft.';
+      const ended = new Promise<void>(resolve => { playbackFinished = resolve; });
+      await audioPlayer.playWav(wav);
+      if (generation !== speechGeneration) { playbackFinished?.(); return; }
+      setState('speaking');
+      await ended;
+    } catch (error) {
+      if (generation !== speechGeneration) return;
+      speechSequenceActive = false;
+      stopAudioButton!.disabled = true;
+      character?.setMouthOpen(0);
+      setState('idle');
+      const complete = index === 0 ? 'Sprachausgabe fehlgeschlagen.' : `Sprachausgabe teilweise fehlgeschlagen: ${index} von ${chunks.length} Abschnitten wurden abgespielt.`;
+      retrySpeech = { chunks, nextIndex: index, generation, metrics };
+      retrySpeechButton!.disabled = false;
+      speechStatus!.textContent = `${complete} Fehlgeschlagenen Abschnitt gezielt wiederholen möglich.`;
+      notice!.textContent = complete + ' Textantwort bleibt erhalten.';
+      console.error(error);
+      return;
+    } finally {
+      window.clearTimeout(synthTimeout);
+      if (speechRequest === synth) speechRequest = undefined;
+    }
+  }
+  if (generation === speechGeneration) {
+    speechSequenceActive = false;
+    stopAudioButton!.disabled = true;
+    speechStatus!.textContent = 'Wiedergabe beendet.';
+    setState('idle');
+  }
+}
 stopAudioButton.addEventListener('click', () => { dialogueMetrics = undefined; stopSpeech(); speechStatus.textContent = 'Wiedergabe gestoppt.'; });
+retrySpeechButton.addEventListener('click', () => {
+  const retry = retrySpeech;
+  if (!retry || retry.generation !== speechGeneration) return;
+  retrySpeech = undefined;
+  retrySpeechButton.disabled = true;
+  notice!.textContent = '';
+  // initialize() is invoked in this click handler so a suspended AudioContext can resume.
+  void audioPlayer.initialize().then(
+    () => playSpeechSequence('', retry.generation, retry.metrics, retry.nextIndex, retry.chunks),
+    () => {
+      if (retry.generation !== speechGeneration) return;
+      retrySpeech = retry;
+      retrySpeechButton.disabled = false;
+      speechStatus.textContent = 'Audio-Wiedergabe nicht verfügbar; fehlgeschlagenen Abschnitt erneut versuchen.';
+    },
+  );
+});
 speechEnabled.addEventListener('change', () => { if (!speechEnabled.checked) { dialogueMetrics = undefined; stopSpeech(); } });
 volume.addEventListener('input', () => audioPlayer.setVolume(Number(volume.value)));
 void fetch('/api/tts/status').then(async response => {
@@ -337,28 +461,7 @@ form.addEventListener('submit', async event => {
     if (wantsSpeech && generation === speechGeneration) {
       if (!(await audioReady)) throw new Error('Audio unavailable');
       if (generation !== speechGeneration) return;
-      const synth = new AbortController();
-      speechRequest = synth;
-      stopAudioButton.disabled = false;
-      speechStatus.textContent = 'Sprachausgabe wird erzeugt …';
-      const synthTimeout = window.setTimeout(() => synth.abort(), 65000);
-      const ttsStarted = performance.now();
-      try {
-        const response = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Owli-Request': '1' }, body: JSON.stringify({ text: chatResult.reply }), signal: synth.signal });
-        if (!response.ok) throw new Error('TTS HTTP ' + response.status);
-        const piperProviderMs = serverDuration(response, 'piper');
-        const wav = await response.arrayBuffer();
-        addTiming(dialogueMetrics === metrics ? metrics : undefined, 'tts_request_ms', ttsStarted, performance.now());
-        if (piperProviderMs !== undefined && dialogueMetrics === metrics && metrics) metrics.values.piper_ms = piperProviderMs;
-        if (generation !== speechGeneration) return;
-        await audioPlayer.playWav(wav);
-        if (generation !== speechGeneration) return;
-        setState('speaking');
-        speechStatus.textContent = 'Wiedergabe läuft.';
-      } finally {
-        window.clearTimeout(synthTimeout);
-        if (speechRequest === synth) speechRequest = undefined;
-      }
+      await playSpeechSequence(chatResult.reply, generation, metrics);
     } else {
       notice.textContent = 'Textantwort ohne Ton.';
     }
