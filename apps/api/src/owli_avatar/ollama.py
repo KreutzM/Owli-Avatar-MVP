@@ -68,3 +68,80 @@ class OllamaProvider:
             raise ProviderError("PROVIDER_TIMEOUT", 504, "The text provider timed out") from exc
         except httpx.RequestError as exc:
             raise ProviderError("PROVIDER_UNAVAILABLE", 503, "The text provider is unavailable") from exc
+
+    async def stream(self, messages: list[dict[str, str]]):
+        """Yield bounded response text deltas from Ollama's NDJSON protocol."""
+        payload = {"model": self.model, "messages": messages, "stream": True, "options": {"num_predict": 256}}
+        if self.think != "auto":
+            payload["think"] = self.think == "true"
+        total_chars = 0
+        saw_done = False
+        try:
+            async with asyncio.timeout(self.total_timeout):
+                async with httpx.AsyncClient(timeout=httpx.Timeout(self.total_timeout, connect=self.connect_timeout), transport=self.transport, trust_env=False, follow_redirects=False) as client:
+                    async with client.stream("POST", self.base_url + "/api/chat", json=payload) as response:
+                        if response.status_code == 404:
+                            raise ProviderError("MODEL_NOT_FOUND", 503, "The configured model is unavailable")
+                        if not 200 <= response.status_code < 300:
+                            raise ProviderError("PROVIDER_ERROR", 502, "The text provider could not complete the request")
+                        line_buffer = bytearray()
+                        total_bytes = 0
+
+                        def parse_line(raw_line: bytes) -> tuple[str, bool] | None:
+                            nonlocal total_chars
+                            if not raw_line:
+                                return None
+                            try:
+                                part = json.loads(raw_line)
+                                content = part.get("message", {}).get("content", "")
+                                done = part.get("done")
+                                if not isinstance(content, str) or not isinstance(done, bool):
+                                    raise ValueError
+                                total_chars += len(content)
+                                if total_chars > 4000:
+                                    raise ValueError
+                                return content, done
+                            except (ValueError, TypeError, AttributeError) as exc:
+                                raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response") from exc
+
+                        async def process_line(raw_line: bytes):
+                            nonlocal saw_done
+                            parsed = parse_line(raw_line)
+                            if parsed is None:
+                                return
+                            content, done = parsed
+                            if content:
+                                yield content
+                            if done:
+                                saw_done = True
+
+                        async for chunk in response.aiter_bytes():
+                            total_bytes += len(chunk)
+                            if total_bytes > 1024 * 1024:
+                                raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response")
+                            offset = 0
+                            while offset < len(chunk):
+                                newline = chunk.find(b"\n", offset)
+                                end = len(chunk) if newline < 0 else newline
+                                if len(line_buffer) + end - offset > 65536:
+                                    raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response")
+                                line_buffer.extend(chunk[offset:end])
+                                if newline < 0:
+                                    break
+                                async for content in process_line(bytes(line_buffer).rstrip(b"\r")):
+                                    yield content
+                                line_buffer.clear()
+                                offset = newline + 1
+                                if saw_done:
+                                    break
+                            if saw_done:
+                                break
+                        if not saw_done and line_buffer:
+                            async for content in process_line(bytes(line_buffer).rstrip(b"\r")):
+                                yield content
+                        if not saw_done or total_chars == 0:
+                            raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an incomplete response")
+        except (TimeoutError, httpx.TimeoutException) as exc:
+            raise ProviderError("PROVIDER_TIMEOUT", 504, "The text provider timed out") from exc
+        except httpx.RequestError as exc:
+            raise ProviderError("PROVIDER_UNAVAILABLE", 503, "The text provider is unavailable") from exc
