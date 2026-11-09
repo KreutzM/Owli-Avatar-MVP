@@ -1,4 +1,4 @@
-import { test, expect, type Page } from './chat-stream-fixtures';
+import { test, expect, fulfillChatStream, type Page } from './chat-stream-fixtures';
 
 test.use({ video: 'on' });
 
@@ -28,7 +28,7 @@ async function blockUnmockedApi(page: Page) {
   // so these tests can never fall through the Vite proxy to another service.
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
-    if (path === '/api/chat') return route.fulfill({ json: { reply: 'Mock-Antwort für den Audiotest.', mode: 'mock', session_id: 'test-session' } });
+    if (path === '/api/chat/stream') return fulfillChatStream(route, { reply: 'Mock-Antwort für den Audiotest.', mode: 'mock', session_id: 'test-session' });
     if (path === '/api/tts/status') return route.fulfill({ json: { enabled: true } });
     if (path === '/api/health') return route.fulfill({ json: { mode: 'mock' } });
     if (path === '/api/stt/status') return route.fulfill({ json: { enabled: false } });
@@ -97,7 +97,7 @@ test('long speech is split at sentence boundaries and all chunks play in order',
   const reply = ['Erster Abschnitt ' + 'eins '.repeat(58) + '.', 'Zweiter Abschnitt ' + 'zwei '.repeat(58) + '.', 'Dritter Abschnitt ' + 'drei '.repeat(58) + '.'].join(' ');
   const spoken: string[] = [];
   await blockUnmockedApi(page);
-  await page.route('**/api/chat', route => route.fulfill({ json: { reply, mode: 'mock', session_id: 'test-session' } }));
+  await page.route('**/api/chat/stream', route => fulfillChatStream(route, { reply, mode: 'mock', session_id: 'test-session' }));
   await page.route('**/api/tts/status', route => route.fulfill({ json: { enabled: true } }));
   await page.route('**/api/tts', async route => {
     spoken.push((route.request().postDataJSON() as { text: string }).text);
@@ -119,7 +119,7 @@ test('a later TTS failure reports partial playback and closes the jaw', async ({
   const reply = 'Erster vollständiger Satz ' + 'eins '.repeat(58) + '. Zweiter Satz ' + 'zwei '.repeat(58) + '.';
   let requests = 0;
   await blockUnmockedApi(page);
-  await page.route('**/api/chat', route => route.fulfill({ json: { reply, mode: 'mock', session_id: 'test-session' } }));
+  await page.route('**/api/chat/stream', route => fulfillChatStream(route, { reply, mode: 'mock', session_id: 'test-session' }));
   await page.route('**/api/tts/status', route => route.fulfill({ json: { enabled: true } }));
   await page.route('**/api/tts', route => {
     requests++;
@@ -144,7 +144,7 @@ test('segmentation preserves leading punctuation, repeated spaces and Unicode co
   const reply = '...?!   Grüße 👩🏽‍🚀 — ' + '界😀 '.repeat(100) + '??? End.“  ';
   const spoken: string[] = [];
   await blockUnmockedApi(page);
-  await page.route('**/api/chat', route => route.fulfill({ json: { reply, mode: 'mock', session_id: 'test-session' } }));
+  await page.route('**/api/chat/stream', route => fulfillChatStream(route, { reply, mode: 'mock', session_id: 'test-session' }));
   await page.route('**/api/tts/status', route => route.fulfill({ json: { enabled: true } }));
   await page.route('**/api/tts', async route => {
     spoken.push((route.request().postDataJSON() as { text: string }).text);
@@ -170,7 +170,7 @@ test('retry resumes only at the failed chunk and continues in order', async ({ p
   const ttsChunks = [chunks[0], ` ${chunks[1]}`, ` ${chunks[2]}`];
   const requested: string[] = [];
   await blockUnmockedApi(page);
-  await page.route('**/api/chat', route => route.fulfill({ json: { reply, mode: 'mock', session_id: 'test-session' } }));
+  await page.route('**/api/chat/stream', route => fulfillChatStream(route, { reply, mode: 'mock', session_id: 'test-session' }));
   await page.route('**/api/tts/status', route => route.fulfill({ json: { enabled: true } }));
   await page.route('**/api/tts', async route => {
     const text = (route.request().postDataJSON() as { text: string }).text;
