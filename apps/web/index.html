@@ -21,7 +21,8 @@
         <div id="messages" role="log" aria-live="polite"></div>
         <form id="chat-form">
           <label for="message">Deine Nachricht</label>
-          <textarea id="message" name="message" maxlength="1000" rows="3" required></textarea>
+          <textarea id="message" name="message" maxlength="1000" rows="3" aria-describedby="message-help" required></textarea>
+          <p id="message-help">Enter: Senden · Shift+Enter: Zeilenumbruch</p>
           <button id="send" type="submit">Absenden</button>
         </form>
         <button id="ptt" type="button" disabled>Aufnahme starten</button>

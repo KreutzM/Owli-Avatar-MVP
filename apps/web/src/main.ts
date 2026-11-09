@@ -410,6 +410,13 @@ void fetch('/api/health').then(async response => {
 
 let sessionId: string | undefined;
 
+input.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey
+    || event.isComposing || event.keyCode === 229 || event.repeat || send.disabled) return;
+  event.preventDefault();
+  form.requestSubmit();
+});
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
   const message = input.value.trim();
