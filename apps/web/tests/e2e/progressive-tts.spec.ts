@@ -136,3 +136,28 @@ test('bounded audio backpressure pauses the chat timeout and drains every segmen
   await expect(page.locator('#speech-status')).toContainText('Wiedergabe beendet.', { timeout: 10000 });
   expect(spoken).toEqual(['One. ', 'Two. ', 'Three. ', 'Four.']);
 });
+
+test('closing marks and following whitespace never push a chunk past 350 code points', async ({ page }) => {
+  const reply = `${'x'.repeat(349)}.\u201d  Rest.`;
+  const spoken: string[] = [];
+  await page.route('**/api/tts/status', route => route.fulfill({ json: { enabled: true } }));
+  await page.route('**/api/tts', async route => {
+    spoken.push((route.request().postDataJSON() as { text: string }).text);
+    await route.fulfill({ contentType: 'audio/wav', body: wavFixture(0.1) });
+  });
+  await page.route('**/api/chat/stream', route => {
+    const events = [
+      { type: 'start', session_id: 'boundary-session', mode: 'mock' },
+      { type: 'delta', text: reply },
+      { type: 'done', reply, session_id: 'boundary-session', mode: 'mock' },
+    ];
+    return route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: events.map(event => JSON.stringify(event)).join('\n') + '\n' });
+  });
+  await page.goto('/');
+  await page.locator('#speech-enabled').check();
+  await page.locator('#message').fill('Grenztest');
+  await page.locator('#send').click();
+  await expect(page.locator('#speech-status')).toContainText('Wiedergabe beendet.', { timeout: 10000 });
+  expect(spoken.join('')).toBe(reply);
+  expect(spoken.every(chunk => Array.from(chunk).length <= 350)).toBe(true);
+});

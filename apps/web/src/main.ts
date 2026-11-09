@@ -136,10 +136,11 @@ function takeSpeechChunks(buffer: string, flush = false, maxChars = 350): { chun
       let end = i + 1;
       while (end < chars.length && punct.includes(chars[end])) end++;
       while (end < chars.length && closers.includes(chars[end])) end++;
-      if (end < chars.length && /\s/u.test(chars[end])) {
-        while (end < chars.length && /\s/u.test(chars[end])) end++;
+      if (end <= limit && end < chars.length && /\s/u.test(chars[end])) {
+        while (end < limit && end < chars.length && /\s/u.test(chars[end])) end++;
         sentenceEnd = end;
-      } else if (flush && end === chars.length) sentenceEnd = end;
+      }
+      else if (flush && end === chars.length && end <= limit) sentenceEnd = end;
     }
     if (sentenceEnd > start) {
       chunks.push(chars.slice(start, sentenceEnd).join(''));
