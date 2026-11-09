@@ -1,0 +1,12 @@
+import { test, expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+const out='/tmp/owli-visual26';
+function wavFixture():Buffer{const rate=16000,duration=3,frames=rate*duration,data=Buffer.alloc(44+frames*2);data.write('RIFF',0);data.writeUInt32LE(data.length-8,4);data.write('WAVEfmt ',8);data.writeUInt32LE(16,16);data.writeUInt16LE(1,20);data.writeUInt16LE(1,22);data.writeUInt32LE(rate,24);data.writeUInt32LE(rate*2,28);data.writeUInt16LE(2,32);data.writeUInt16LE(16,34);data.write('data',36);data.writeUInt32LE(frames*2,40);for(let i=Math.floor(rate*.2);i<Math.floor(rate*2.6);i++)data.writeInt16LE(Math.round(10000*Math.sin(2*Math.PI*440*i/rate)),44+i*2);return data;}
+test('synthetic TTS mouth signal follows playback and returns closed',async({page})=>{
+  await page.route('**/*',async route=>{const u=new URL(route.request().url());if(u.pathname.startsWith('/api/')){if(u.pathname==='/api/tts'&&route.request().method()==='POST')return route.fulfill({status:200,contentType:'audio/wav',body:wavFixture()});if(u.pathname==='/api/chat'&&route.request().method()==='POST')return route.fulfill({json:{reply:'Kurzer synthetischer Sichttest.',session_id:'visual26',mode:'mock'}});if(u.pathname==='/api/tts/status')return route.fulfill({json:{enabled:true}});if(u.pathname==='/api/stt/status')return route.fulfill({json:{enabled:false}});return route.fulfill({json:{status:'ok',mode:'mock'}});}if(u.hostname==='127.0.0.1'&&u.port==='15326')return route.continue();return route.abort();});
+  await page.setViewportSize({width:1365,height:900});await page.goto('/');await expect(page.locator('#avatar canvas')).toBeVisible();await mkdir(out,{recursive:true});
+  await page.screenshot({path:`${out}/runtime-proposal-closed.png`});await page.locator('#speech-enabled').check();await page.locator('#message').fill('Visueller Test');await page.locator('#send').click();
+  await expect(page.locator('#state')).toContainText('speaking');await expect.poll(async()=>Number(await page.locator('#avatar').getAttribute('data-mouth')),{timeout:4000}).toBeGreaterThan(.08);
+  const sampledMouth=await page.locator('#avatar').getAttribute('data-mouth');await writeFile(`${out}/runtime-playback.json`,JSON.stringify({syntheticToneHz:440,syntheticPcmAmplitude:10000,sampledMouth,gain:1},null,2));await page.screenshot({path:`${out}/runtime-baseline-speaking.png`});
+  await expect(page.locator('#state')).toContainText('idle',{timeout:5000});await expect.poll(async()=>Number(await page.locator('#avatar').getAttribute('data-mouth'))).toBe(0);
+});
