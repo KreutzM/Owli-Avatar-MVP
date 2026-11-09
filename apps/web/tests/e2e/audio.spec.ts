@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './chat-stream-fixtures';
 
 test.use({ video: 'on' });
 

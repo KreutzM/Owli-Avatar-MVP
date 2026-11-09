@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './chat-stream-fixtures';
+import { fulfillChatStream } from './chat-stream-fixtures';
 
 test('canvas renders and mock chat replies', async ({ page }) => {
   await page.goto('/');
@@ -21,7 +22,7 @@ test('WebGL absence does not break chat', async ({ page }) => {
 });
 
 test('HTTP failures do not trap the user in thinking state', async ({ page }) => {
-  await page.route('**/api/chat', route => route.fulfill({ status: 503, body: 'unavailable' }));
+  await page.route('**/api/chat/stream', route => route.fulfill({ status: 503, body: 'unavailable' }));
   await page.goto('/');
   await page.locator('#message').fill('Test 503');
   await page.locator('#send').click();
@@ -31,7 +32,7 @@ test('HTTP failures do not trap the user in thinking state', async ({ page }) =>
 });
 
 test('timed out API request allows retry', async ({ page }) => {
-  await page.route('**/api/chat', () => new Promise<void>(() => {}));
+  await page.route('**/api/chat/stream', () => new Promise<void>(() => {}));
   await page.goto('/');
   await page.locator('#message').fill('Langsame Antwort');
   await page.locator('#send').click();
@@ -41,14 +42,10 @@ test('timed out API request allows retry', async ({ page }) => {
 
 test('Ollama mode continues the returned session across turns', async ({ page }) => {
   const requests: Array<{ message: string; session_id?: string }> = [];
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     const payload = route.request().postDataJSON() as { message: string; session_id?: string };
     requests.push(payload);
-    await route.fulfill({ json: {
-      reply: `Ollama-Antwort: ${payload.message}`,
-      session_id: 'ollama-session-1',
-      mode: 'ollama',
-    } });
+    await fulfillChatStream(route, { reply: `Ollama-Antwort: ${payload.message}`, session_id: 'ollama-session-1', mode: 'ollama' });
   });
   await page.goto('/');
   await page.locator('#message').fill('Erster Zug');
@@ -66,10 +63,10 @@ test('Ollama mode continues the returned session across turns', async ({ page })
 
 test('API error can be retried successfully', async ({ page }) => {
   let attempts = 0;
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     attempts += 1;
     if (attempts === 1) return route.fulfill({ status: 503, body: 'unavailable' });
-    return route.fulfill({ json: { reply: 'Wieder da', session_id: 'retry-session', mode: 'mock' } });
+    return fulfillChatStream(route, { reply: 'Wieder da', session_id: 'retry-session', mode: 'mock' });
   });
   await page.goto('/');
   await page.locator('#message').fill('Retry');

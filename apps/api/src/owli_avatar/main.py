@@ -15,7 +15,7 @@ from .ollama import OllamaProvider, ProviderError
 from .sessions import Sessions
 from .tts import MAX_TEXT_CHARS, PiperProvider
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 class ChatGuard:
@@ -26,7 +26,7 @@ class ChatGuard:
         self.read_timeout = 5
 
     async def __call__(self, scope, receive, send):
-        if scope['type'] != 'http' or scope['path'] not in ('/api/chat', '/api/tts') or scope['method'] != 'POST':
+        if scope['type'] != 'http' or scope['path'] not in ('/api/chat', '/api/chat/stream', '/api/tts') or scope['method'] != 'POST':
             return await self.app(scope, receive, send)
         now = time.monotonic()
         while self.requests and now - self.requests[0] >= 60:
@@ -136,7 +136,7 @@ async def diagnostic_timing(request: Request, call_next):
 _DIAGNOSTIC_REQUESTS: deque[float] = deque()
 _DIAGNOSTIC_KEYS = frozenset({
     "capture_to_upload_ms", "upload_ms", "stt_request_ms", "stt_ms", "chat_request_ms",
-    "ollama_ms", "tts_request_ms", "piper_ms", "capture_to_playback_ms", "fps",
+    "ollama_ms", "tts_request_ms", "piper_ms", "capture_to_playback_ms", "chat_first_token_ms", "fps",
 })
 
 
@@ -299,6 +299,76 @@ async def ollama_chat(payload: ChatRequest, request: Request, message: str, chat
         finally:
             if not session.messages:
                 sessions.items.pop(session_id, None)
+
+
+def ndjson_event(event: dict) -> bytes:
+    return (json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(payload: ChatRequest, request: Request) -> Response:
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=422, detail="message must not be blank")
+    selected = mode()
+    if selected == "mock":
+        session_id = payload.session_id or "demo-session"
+        reply = f"Mock-Antwort: Du hast gefragt: {message}"
+
+        async def mock_events():
+            yield ndjson_event({"type": "start", "session_id": session_id, "mode": "mock"})
+            for offset in range(0, len(reply), 24):
+                yield ndjson_event({"type": "delta", "text": reply[offset:offset + 24]})
+                await asyncio.sleep(0)
+            yield ndjson_event({"type": "done", "reply": reply, "session_id": session_id, "mode": "mock"})
+
+        return StreamingResponse(mock_events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Accel-Buffering": "no"})
+
+    global active_provider_requests
+    if active_provider_requests >= 4:
+        raise ProviderError("PROVIDER_BUSY", 503, "The text provider is busy")
+    chat_provider = provider()
+    try:
+        session_id, session = sessions.get(payload.session_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Session expired or unavailable")
+    except OverflowError:
+        raise ProviderError("SESSION_LIMIT", 503, "Too many active sessions")
+    if session.lock.locked():
+        raise ProviderError("SESSION_BUSY", 409, "A request is already in progress")
+    await session.lock.acquire()
+    active_provider_requests += 1
+    started = time.perf_counter()
+    messages = [*session.messages, {"role": "user", "content": message}]
+
+    async def ollama_events():
+        global active_provider_requests
+        reply_parts: list[str] = []
+        try:
+            yield ndjson_event({"type": "start", "session_id": session_id, "mode": "ollama"})
+            async for delta in chat_provider.stream(messages):
+                reply_parts.append(delta)
+                yield ndjson_event({"type": "delta", "text": delta})
+            reply = "".join(reply_parts).strip()
+            if not reply:
+                raise ProviderError("INVALID_PROVIDER_RESPONSE", 502, "The text provider returned an invalid response")
+            if os.getenv("OWLI_DIAGNOSTICS") == "1":
+                request.state.provider_timing = ("ollama", (time.perf_counter() - started) * 1000)
+            yield ndjson_event({"type": "done", "reply": reply, "session_id": session_id, "mode": "ollama"})
+            sessions.add_turn(session, message, reply)
+        except asyncio.CancelledError:
+            raise
+        except ProviderError as exc:
+            yield ndjson_event({"type": "error", "error": {"code": exc.code, "message": exc.message}})
+        except Exception:
+            yield ndjson_event({"type": "error", "error": {"code": "PROVIDER_ERROR", "message": "The text provider could not complete the request"}})
+        finally:
+            session.lock.release()
+            active_provider_requests -= 1
+            if not session.messages:
+                sessions.items.pop(session_id, None)
+
+    return StreamingResponse(ollama_events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "X-Accel-Buffering": "no"})
 
 
 def tts_mode() -> str:
