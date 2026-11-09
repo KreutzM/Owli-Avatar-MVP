@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, fulfillChatStream } from './chat-stream-fixtures';
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/health', route => route.fulfill({ json: { status: 'ok', mode: 'mock' } }));
@@ -6,9 +6,9 @@ test.beforeEach(async ({ page }) => {
 
 test('Enter submits once and returns focus to the message field', async ({ page }) => {
   const requests: string[] = [];
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     requests.push(route.request().postDataJSON().message);
-    await route.fulfill({ json: { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' } });
+    await fulfillChatStream(route, { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' });
   });
   await page.goto('/');
   const message = page.locator('#message');
@@ -23,9 +23,9 @@ test('Enter submits once and returns focus to the message field', async ({ page 
 
 test('Shift+Enter inserts a newline; a later Enter submits the full message', async ({ page }) => {
   let submitted = '';
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     submitted = route.request().postDataJSON().message;
-    await route.fulfill({ json: { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' } });
+    await fulfillChatStream(route, { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' });
   });
   await page.goto('/');
   const message = page.locator('#message');
@@ -40,9 +40,9 @@ test('Shift+Enter inserts a newline; a later Enter submits the full message', as
 
 test('IME composition Enter and keyCode 229 do not submit', async ({ page }) => {
   let requests = 0;
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     requests += 1;
-    await route.fulfill({ json: { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' } });
+    await fulfillChatStream(route, { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' });
   });
   await page.goto('/');
   const message = page.locator('#message');
@@ -55,9 +55,9 @@ test('IME composition Enter and keyCode 229 do not submit', async ({ page }) => 
 
 test('blank input does not submit and Shift+Enter on whitespace stays local', async ({ page }) => {
   let requests = 0;
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     requests += 1;
-    await route.fulfill({ json: { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' } });
+    await fulfillChatStream(route, { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' });
   });
   await page.goto('/');
   const message = page.locator('#message');
@@ -73,10 +73,10 @@ test('in-flight and autorepeat Enter cannot duplicate a request; button still su
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
   const requests: string[] = [];
-  await page.route('**/api/chat', async route => {
+  await page.route('**/api/chat/stream', async route => {
     requests.push(route.request().postDataJSON().message);
     await gate;
-    await route.fulfill({ json: { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' } });
+    await fulfillChatStream(route, { reply: 'Antwort', session_id: 'keyboard-session', mode: 'mock' });
   });
   await page.goto('/');
   const message = page.locator('#message');
