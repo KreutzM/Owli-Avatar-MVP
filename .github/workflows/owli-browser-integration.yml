@@ -73,8 +73,16 @@ jobs:
           "$RUNNER_TEMP/blender-${BLENDER_VERSION}-linux-x64/blender" \
             --background --factory-startup --threads 4 --python scripts/export_owli_glb.py
           python3 scripts/check_owli_glb.py output/owli_glb
-      - name: Import SHA-256 pinned model into ignored local test path
-        run: python3 scripts/prepare-owli.py blender-fun/output/owli_glb/owli_avatar.glb
+      - name: Stage source-pinned, structurally validated GLB for isolated browser test
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Byte-identical output is NOT guaranteed across independent Blender runs;
+          # source commit, Blender archive and glTF structure are pinned/verified.
+          # The manually distributed CI artifact retains a separate strict SHA-256.
+          mkdir -p apps/web/public/models
+          cp blender-fun/output/owli_glb/owli_avatar.glb apps/web/public/models/owli-avatar.glb
+          sha256sum apps/web/public/models/owli-avatar.glb
       - name: Install API and web test dependencies
         run: |
           python -m pip install 'uv==0.9.17'
