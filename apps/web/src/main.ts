@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { VuenaCharacterAdapter, type CharacterAdapter, type CharacterState } from './avatar/character';
+import { OwliCharacterAdapter } from './avatar/owli';
 import { AudioPlayer } from './audio/AudioPlayer';
 import { PushToTalk } from './audio/PushToTalk';
 import './style.css';
@@ -193,24 +194,36 @@ void fetch('/api/stt/status').then(async response => {
   ptt.disabled = !sttAvailable;
   sttStatus.textContent = sttAvailable ? 'Spracheingabe bereit.' : 'Spracheingabe deaktiviert; Texteingabe bleibt möglich.';
 }).catch(() => { sttStatus.textContent = 'Spracheingabe nicht verfügbar; Texteingabe bleibt möglich.'; });
+// Opt-in own Owli model; Vuena stays the exact original default.
+const assetChoice = import.meta.env.VITE_AVATAR_MODEL === 'owli' ? 'owli' : 'vuena';
+const modelPath = assetChoice === 'owli' ? '/models/owli-avatar.glb' : '/models/vuena-owl.glb';
 host.dataset.character = 'loading';
-if (renderer) new GLTFLoader().load('/models/vuena-owl.glb', gltf => {
+if (renderer) new GLTFLoader().load(modelPath, gltf => {
   if (disposed) return;
-  character = new VuenaCharacterAdapter(gltf);
-  character.root.scale.setScalar(5);
-  character.root.position.y = -1.1;
+  character = assetChoice === 'owli' ? new OwliCharacterAdapter(gltf) : new VuenaCharacterAdapter(gltf);
+  if (assetChoice === 'owli') {
+    character.root.scale.setScalar(1);
+    character.root.position.y = -0.25;
+    // Fitted camera framing, verified against real GLB screenshot.
+    camera.position.set(0, 1.65, 8.9);
+    camera.lookAt(0, 1.65, 0);
+  } else {
+    character.root.scale.setScalar(5);
+    character.root.position.y = -1.1;
+  }
   character.setState(state);
   scene.add(character.root);
-  host.dataset.character = 'vuena';
-  host.setAttribute('aria-label', 'Animierte dreidimensionale Vuena-Eule');
+  host.dataset.character = assetChoice;
+  host.setAttribute('aria-label',
+    assetChoice === 'owli' ? 'Parametrischer dreidimensionaler Owli-Avatar' : 'Animierte dreidimensionale Vuena-Eule');
   const description = document.querySelector<HTMLParagraphElement>('.heading p');
-  if (description) description.textContent = 'Vuena · 3D-Testmodell';
+  if (description) description.textContent = assetChoice === 'owli' ? 'Owli · eigener 3D-Prototyp' : 'Vuena · 3D-Testmodell';
 }, undefined, () => {
   host.dataset.character = 'unavailable';
   const message = document.createElement('p');
   message.id = 'model-fallback';
   message.setAttribute('role', 'status');
-  message.textContent = 'Vuena-Modell nicht verfügbar. Der Textchat bleibt nutzbar.';
+  message.textContent = (assetChoice === 'owli' ? 'Owli' : 'Vuena') + '-Modell nicht verfügbar. Der Textchat bleibt nutzbar.';
   host.append(message);
 });
 function resize() {

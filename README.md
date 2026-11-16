@@ -123,3 +123,34 @@ Der Nutzer hat den durchgaengigen Sprachtest in Phase 5 ueber SSH-Forwarding abg
 ### Betrieb und Windows-Zugriff
 
 Start, Stop, opt-in Leistungsmessung, Voraussetzungen und der noch separat freizugebende HTTPS-LAN-Betrieb stehen in [docs/ki-server.md](docs/ki-server.md). Der HTTPS-Zugang ist fuer das konfigurierte Heimnetz ohne Passwort vorgesehen; er ist noch nicht dauerhaft eingerichtet. Der erprobte SSH-Localhost-Portforward bleibt als Fallback verfuegbar. Die Rechte an der lokalen Teststimme de_DE-thorsten-medium sind nicht abschliessend geklaert; produktive oder kommerzielle Weitergabe ist nicht freigegeben.
+
+
+### Eigenes parametrisches Owli-Modell als Browser-Avatar (opt-in, noch nicht live abgenommen)
+
+Der bisherige Vuena-Charakter bleibt der Standard. Der neue `OwliCharacterAdapter`
+in `apps/web/src/avatar/owli.ts` verwendet das eigene 3D-Modell aus
+[`KreutzM/blender-fun`](https://github.com/KreutzM/blender-fun).
+Sein `jaw`-Bone, die `Open`-Mundhöhlen-Morph und `Closed`-Lid-Morphs
+werden **direkt in Three.js** gesteuert. Blender-Custom-Properties und Driver
+sind nicht als glTF-Laufzeitsteuerung verfügbar. Die bisherige Audio-Pegel-
+Steuerung bleibt unverändert; echtes phonembasiertes Lip-Sync ist weiterhin
+nicht implementiert.
+
+Für den Test: Lade das verifizierte CI-Artefakt des
+[Owli-GLB-Exports](https://github.com/KreutzM/blender-fun/actions/runs/43833007099)
+herunter, entpacke die Datei `owli_avatar.glb` und führe dann aus:
+
+```bash
+python3 scripts/prepare-owli.py /pfad/zur/owli_avatar.glb
+# vor Web-Start: Owli explizit statt Vuena wählen
+export VITE_AVATAR_MODEL=owli
+bash scripts/run-dev.sh
+```
+
+Das Importskript verifiziert den festgehaltenen SHA-256 und verweigert
+stille Überschreibungen. Das GLB bleibt gitignored, da die Lizenz-/Weitergabe-
+prüfung für das eigene Modell noch dokumentiert werden muss. Zum bisherigen
+Modell zurückkehren: `VITE_AVATAR_MODEL` auf `vuena` setzen oder entfernen.
+Ein Ladefehler fällt **nicht stillschweigend auf Vuena** zurück; der Textchat
+bleibt nutzbar. Die Browser- und visuelle Realabnahme des eigenen GLB
+sind von diesen Quellcode- und CI-Tests getrennte Gates, siehe Issue #40.
