@@ -1,4 +1,5 @@
 import { Bone, BoxGeometry, Group, Mesh, MeshBasicMaterial } from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OwliCharacterAdapter } from '../../src/avatar/owli';
 
@@ -37,4 +38,17 @@ export function inspect() {
   const angleClosed = rest.angleTo(jaw.quaternion);
   adapter.dispose();
   return {capabilities: adapter.capabilities, angleOpen, angleClosed, cavityOpen, lidClosed, gazeRotated, gazeMoved};
+}
+
+export async function inspectReal() {
+  const gltf = await new GLTFLoader().loadAsync('/models/owli-avatar.glb');
+  const avatar = new OwliCharacterAdapter(gltf);
+  avatar.setMouthOpen(1);
+  for (let i = 0; i < 60; i++) avatar.update(1 / 60);
+  const jaw = avatar.root.getObjectByName('jaw');
+  const lower = avatar.root.getObjectByName('Beak | lower articulated mandible');
+  const out = {capabilities: avatar.capabilities, hasJaw: Boolean(jaw),
+    hasLower: Boolean(lower)};
+  avatar.dispose();
+  return out;
 }
