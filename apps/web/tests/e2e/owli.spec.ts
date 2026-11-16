@@ -20,6 +20,8 @@ test('optional local Owli asset is a real loadable glTF, if supplied', async ({p
   test.skip(!existsSync(resolve('public/models/owli-avatar.glb')),
     'Requires explicit installation of pinned Owli artifact');
   await page.goto('/');
+  await expect(page.locator('#avatar')).toHaveAttribute('data-character','owli');
+  await page.locator('#avatar').screenshot({path:'test-results/owli-real-browser.png'});
   const result = await page.evaluate(async () => {
     const module = await import(/* @vite-ignore */ '/tests/e2e/owli-harness.ts');
     return module.inspectReal();
