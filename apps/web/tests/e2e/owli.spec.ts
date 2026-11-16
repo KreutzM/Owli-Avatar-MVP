@@ -21,18 +21,8 @@ test('optional local Owli asset is a real loadable glTF, if supplied', async ({p
     'Requires explicit installation of pinned Owli artifact');
   await page.goto('/');
   const result = await page.evaluate(async () => {
-    const {GLTFLoader} = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const gltf = await new GLTFLoader().loadAsync('/models/owli-avatar.glb');
-    const {OwliCharacterAdapter} = await import('/src/avatar/owli.ts');
-    const avatar = new OwliCharacterAdapter(gltf);
-    avatar.setMouthOpen(1);
-    for (let i = 0; i < 60; i++) avatar.update(1 / 60);
-    const jaw = avatar.root.getObjectByName('jaw');
-    const lower = avatar.root.getObjectByName('Beak | lower articulated mandible');
-    const out = { capabilities: avatar.capabilities, hasJaw: Boolean(jaw),
-      hasLower: Boolean(lower) };
-    avatar.dispose();
-    return out;
+    const module = await import(/* @vite-ignore */ '/tests/e2e/owli-harness.ts');
+    return module.inspectReal();
   });
   expect(result.capabilities.mouthMovement).toBe(true);
   expect(result.capabilities.blink).toBe(true);
