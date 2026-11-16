@@ -29,7 +29,8 @@ jobs:
       - run: apps/api/.venv/bin/python -m pytest apps/api/tests -q
 
   web:
-    runs-on: ubuntu-latest
+    # Playwright 1.55 does not support GitHub's current ubuntu26.04 latest image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
