@@ -14,8 +14,21 @@ const AXIS_Y = new Vector3(0, 1, 0);
 const AXIS_Z = new Vector3(0, 0, 1);
 const MAX_JAW_ANGLE = 42 * Math.PI / 180;
 
+/** GLTFLoader sanitizes spaces/dots in node names, preserving the original
+ * glTF node name in userData.name. Resolve source names, never guess the
+ * loader's output sanitizer or force vendor strings into application code. */
+function getBySourceName(root: Group, name: string): Object3D | undefined {
+  const direct = root.getObjectByName(name);
+  if (direct) return direct;
+  let result: Object3D | undefined;
+  root.traverse(node => {
+    if (!result && node.userData.name === name) result = node;
+  });
+  return result;
+}
+
 function getMorph(root: Group, objectName: string, targetName: string): Morph | undefined {
-  const object = root.getObjectByName(objectName);
+  const object = getBySourceName(root, objectName);
   const mesh = object && (object as Mesh).isMesh ? object as Mesh : undefined;
   if (!mesh) return undefined;
   const index = mesh.morphTargetDictionary?.[targetName];
@@ -58,12 +71,12 @@ export class OwliCharacterAdapter implements CharacterAdapter {
 
   constructor(gltf: GLTF) {
     this.root = gltf.scene;
-    this.jaw = this.root.getObjectByName('jaw');
+    this.jaw = getBySourceName(this.root, 'jaw');
     this.jawRest = this.jaw?.quaternion.clone();
-    this.head = this.root.getObjectByName('head');
+    this.head = getBySourceName(this.root, 'head');
     this.headRest = this.head?.quaternion.clone();
-    this.gazeLeft = this.root.getObjectByName('gaze.L');
-    this.gazeRight = this.root.getObjectByName('gaze.R');
+    this.gazeLeft = getBySourceName(this.root, 'gaze.L');
+    this.gazeRight = getBySourceName(this.root, 'gaze.R');
     this.gazeLeftRest = this.gazeLeft?.quaternion.clone();
     this.gazeRightRest = this.gazeRight?.quaternion.clone();
 

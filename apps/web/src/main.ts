@@ -204,6 +204,8 @@ if (renderer) new GLTFLoader().load(modelPath, gltf => {
   if (assetChoice === 'owli') {
     character.root.scale.setScalar(1);
     character.root.position.y = -0.25;
+    // Fitted camera framing, verified against real GLB screenshot.
+    camera.position.set(0, 1.65, 8.9);
     camera.lookAt(0, 1.65, 0);
   } else {
     character.root.scale.setScalar(5);

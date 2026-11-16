@@ -45,10 +45,20 @@ export async function inspectReal() {
   const avatar = new OwliCharacterAdapter(gltf);
   avatar.setMouthOpen(1);
   for (let i = 0; i < 60; i++) avatar.update(1 / 60);
-  const jaw = avatar.root.getObjectByName('jaw');
-  const lower = avatar.root.getObjectByName('Beak | lower articulated mandible');
+  // Preserve true source node names despite GLTFLoader's animation-safe
+  // sanitization of Object3D.name (spaces and dots are not preserved).
+  const find = (name: string) => {
+    let obj = avatar.root.getObjectByName(name);
+    if (!obj) avatar.root.traverse(node => { if (!obj && node.userData.name === name) obj = node; });
+    return obj;
+  };
+  const jaw = find('jaw');
+  const lower = find('Beak | lower articulated mandible');
+  const cavity = find('Beak | inner mouth cavity (morph)') as Mesh | undefined;
+  const cavityIndex = cavity?.morphTargetDictionary?.Open;
+  const cavityOpen = cavityIndex !== undefined ? cavity?.morphTargetInfluences?.[cavityIndex] : undefined;
   const out = {capabilities: avatar.capabilities, hasJaw: Boolean(jaw),
-    hasLower: Boolean(lower)};
+    hasLower: Boolean(lower), cavityOpen};
   avatar.dispose();
   return out;
 }

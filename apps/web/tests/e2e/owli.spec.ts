@@ -30,4 +30,5 @@ test('optional local Owli asset is a real loadable glTF, if supplied', async ({p
   expect(result.capabilities.blink).toBe(true);
   expect(result.capabilities.gaze).toBe(true);
   expect(result.hasJaw && result.hasLower).toBe(true);
+  expect(result.cavityOpen).toBeGreaterThan(.9);
 });
