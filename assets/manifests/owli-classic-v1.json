@@ -1,0 +1,41 @@
+{
+  "id": "owli-classic-parametric-v1",
+  "repo": "KreutzM/blender-fun",
+  "source_workflow": "https://github.com/KreutzM/blender-fun/actions/runs/43833007099",
+  "artifact": "owli-browser-glb-2-1",
+  "filename": "owli_avatar.glb",
+  "sha256": "eeadefbe2daa3441126c30125f207015c81673849732664d1061bc59de08f8be",
+  "bytes": 2050812,
+  "license": "Not yet established for redistribution; asset must stay gitignored until reviewed",
+  "runtime_path": "apps/web/public/models/owli-avatar.glb",
+  "observed_controls": {
+    "bone": "jaw",
+    "mouth_cavity": {
+      "mesh": "Beak | inner mouth cavity (morph)",
+      "morph": "Open"
+    },
+    "mandible": {
+      "mesh": "Beak | lower articulated mandible",
+      "morphs": [
+        "Wide",
+        "Narrow"
+      ]
+    },
+    "lids": [
+      "Eyelid.L | 0=open 1=closed",
+      "Eyelid.R | 0=open 1=closed"
+    ],
+    "gaze": [
+      "gaze.L",
+      "gaze.R"
+    ]
+  },
+  "validation": {
+    "glb_2": true,
+    "skins": 1,
+    "meshes": 100,
+    "nodes": 121,
+    "morph_meshes": 4,
+    "threejs_browser": "pending"
+  }
+}
